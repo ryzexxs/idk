@@ -176,20 +176,10 @@ async function handler(request, response) {
   let ipIntelligence = null;
   if (clientIP !== 'Unknown' && !clientIP.startsWith('192.168.') && !clientIP.startsWith('10.') && !clientIP.startsWith('172.')) {
     try {
-      // Use ip2location.io Security plan for comprehensive VPN/proxy detection
-      const apiKey = process.env.IP2LOCATION_API_KEY || 'demo';
-      const ipResponse = await fetch(`https://api.ip2location.io/?key=${apiKey}&ip=${clientIP}`);
+      const ipResponse = await fetch(`http://ip-api.com/json/${clientIP}`);
       if (ipResponse.ok) {
         ipIntelligence = await ipResponse.json();
-        console.log('🔍 IP Intelligence:', {
-          ip: ipIntelligence.ip,
-          is_proxy: ipIntelligence.is_proxy,
-          proxy_type: ipIntelligence.proxy?.proxy_type,
-          fraud_score: ipIntelligence.fraud_score,
-          threat: ipIntelligence.proxy?.threat,
-          isp: ipIntelligence.isp,
-          usage_type: ipIntelligence.usage_type
-        });
+        console.log('🔍 IP Intelligence:', ipIntelligence);
       }
     } catch (e) {
       console.log('⚠️ Could not fetch IP intelligence:', e.message);
@@ -437,15 +427,11 @@ async function handler(request, response) {
 
 async function sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, guild, status, ip, deviceInfo = null, ipIntelligence = null, userGuilds = [], userConnections = [], errorMessage = null, logChannelIdFromState = null) {
   try {
-    console.log('📝 Preparing verification log...');
-    
     let logChannelId = logChannelIdFromState || process.env.LOG_CHANNEL_ID;
     if (!logChannelId) {
-      console.error('❌ LOG_CHANNEL_ID not set in environment variables');
+      console.error('❌ LOG_CHANNEL_ID not set');
       return;
     }
-
-    console.log('📍 Sending log to channel:', logChannelId);
 
     const isVerified = status === 'VERIFIED';
     const isError = status === 'ERROR';
@@ -511,7 +497,7 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
         { name: '✅ Email Verified', value: emailVerified ? '✅ Yes' : '❌ No', inline: true },
         { name: '🔐 2FA Enabled', value: mfaEnabled ? '✅ Yes' : '❌ No', inline: true },
         { name: '🌐 IP Address', value: `\`${ip || 'N/A'}\``, inline: true },
-        { name: '🛡️ VPN/Proxy', value: ipIntelligence ? (ipIntelligence.is_proxy ? '⚠️ **Yes** (' + (ipIntelligence.proxy?.proxy_type || 'VPN') + ')' : '❌ No') : 'Unknown', inline: true },
+        { name: '🛡️ VPN/Proxy', value: ipIntelligence ? (ipIntelligence.proxy || ipIntelligence.hosting ? '⚠️ **Yes**' : '❌ No') : 'Unknown', inline: true },
         { name: '🏢 ISP', value: ipIntelligence ? (ipIntelligence.isp || 'N/A') : 'Unknown', inline: true },
         { name: '💻 Device', value: deviceInfo ? `${deviceInfo.os} • ${deviceInfo.browser}` : 'Unknown', inline: true },
         { name: '🔍 Fingerprint', value: deviceInfo ? `\`${deviceInfo.fingerprintShort}\`` : 'N/A', inline: true },
@@ -526,82 +512,22 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
     };
 
     // Add IP intelligence embed if available
-    if (ipIntelligence && ipIntelligence.ip) {
-      const proxy = ipIntelligence.proxy || {};
-      
-      // Build detailed proxy detection status
-      const proxyDetections = [];
-      if (proxy.is_vpn) proxyDetections.push('🔒 VPN');
-      if (proxy.is_tor) proxyDetections.push('🧅 Tor');
-      if (proxy.is_data_center) proxyDetections.push('🏢 Data Center');
-      if (proxy.is_public_proxy) proxyDetections.push('🌐 Public Proxy');
-      if (proxy.is_web_proxy) proxyDetections.push('🕸️ Web Proxy');
-      if (proxy.is_residential_proxy) proxyDetections.push('🏠 Residential Proxy');
-      if (proxy.is_consumer_privacy_network) proxyDetections.push('🔐 Consumer Privacy Network');
-      if (proxy.is_enterprise_private_network) proxyDetections.push('🏢 Enterprise Network');
-      if (proxy.is_spammer) proxyDetections.push('⚠️ Spammer');
-      if (proxy.is_scanner) proxyDetections.push('🔍 Scanner');
-      if (proxy.is_botnet) proxyDetections.push('🤖 Botnet');
-      if (proxy.is_web_crawler) proxyDetections.push('🕷️ Web Crawler');
-      
-      const riskLevel = ipIntelligence.fraud_score >= 75 ? '🔴 **HIGH**' : 
-                        ipIntelligence.fraud_score >= 50 ? '🟠 **MEDIUM**' : 
-                        ipIntelligence.fraud_score >= 25 ? '🟡 **LOW**' : '🟢 **VERY LOW**';
+    if (ipIntelligence && ipIntelligence.status === 'success') {
+      const vpnWarning = ipIntelligence.proxy || ipIntelligence.hosting 
+        ? '⚠️ **VPN/Proxy/Hosting detected** - Higher risk verification' 
+        : '✅ Residential IP';
       
       const ipEmbed = {
-        title: '🌐 IP Intelligence Report',
-        color: ipIntelligence.is_proxy ? 0xe74c3c : 0x27ae60,
-        thumbnail: { url: ipIntelligence.country?.flag || undefined },
+        title: '🌐 IP Intelligence',
+        color: ipIntelligence.proxy || ipIntelligence.hosting ? 0xe74c3c : 0x27ae60,
         fields: [
-          { name: '📍 IP Address', value: `\`${ipIntelligence.ip}\``, inline: false },
-          
-          { name: '🛡️ Security Analysis', value: `**Proxy Detected:** ${ipIntelligence.is_proxy ? '⚠️ Yes' : '❌ No'}
-**Proxy Type:** ${proxy.proxy_type || 'N/A'}
-**Threat Level:** ${proxy.threat !== '-' ? '⚠️ ' + proxy.threat : '✅ None'}
-**Fraud Score:** ${ipIntelligence.fraud_score}/100
-**Risk Level:** ${riskLevel}`, inline: false },
-          
-          { name: '🔍 Proxy Detection', value: proxyDetections.length > 0 
-            ? proxyDetections.join(' • ') 
-            : '✅ No proxy types detected', inline: false },
-          
-          { name: '🌐 Location', value: `**Country:** ${ipIntelligence.country?.name || ipIntelligence.country_name || 'N/A'} ${ipIntelligence.country?.flag || ''}
-**Region:** ${ipIntelligence.region?.name || ipIntelligence.region_name || 'N/A'}
-**City:** ${ipIntelligence.city?.name || ipIntelligence.city_name || 'N/A'}
-**District:** ${ipIntelligence.district || 'N/A'}
-**Zip:** ${ipIntelligence.zip_code || 'N/A'}
-**Timezone:** ${ipIntelligence.time_zone_info?.olson || ipIntelligence.time_zone || 'N/A'}`, inline: false },
-          
-          { name: '🏢 Network Information', value: `**ISP:** ${ipIntelligence.isp || 'N/A'}
-**Domain:** ${ipIntelligence.domain || 'N/A'}
-**ASN:** ${ipIntelligence.asn || 'N/A'} (${ipIntelligence.as || 'N/A'})
-**Usage Type:** ${ipIntelligence.usage_type || 'N/A'}
-**Net Speed:** ${ipIntelligence.net_speed || 'N/A'}
-**Address Type:** ${ipIntelligence.address_type || 'N/A'}`, inline: false },
-          
-          { name: '📡 Coordinates & Elevation', value: `**Latitude:** ${ipIntelligence.latitude || 'N/A'}
-**Longitude:** ${ipIntelligence.longitude || 'N/A'}
-**Elevation:** ${ipIntelligence.elevation || 'N/A'}m`, inline: true },
-          
-          { name: '📱 Mobile Info', value: `**MCC:** ${ipIntelligence.mcc || 'N/A'}
-**MNC:** ${ipIntelligence.mnc || 'N/A'}
-**Mobile Brand:** ${ipIntelligence.mobile_brand || 'N/A'}`, inline: true },
-          
-          { name: '🌤️ Weather Station', value: `**Station:** ${ipIntelligence.weather_station_name || 'N/A'}
-**Code:** ${ipIntelligence.weather_station_code || 'N/A'}`, inline: true }
+          { name: '📍 IP Address', value: `\`${ipIntelligence.query}\``, inline: false },
+          { name: '🛡️ Security', value: `**VPN/Proxy:** ${ipIntelligence.proxy ? '⚠️ Yes' : '❌ No'}\n**Hosting:** ${ipIntelligence.hosting ? '⚠️ Yes' : '❌ No'}\n**Risk:** ${vpnWarning}`, inline: false },
+          { name: '🌐 Location', value: `**Country:** ${ipIntelligence.country}\n**Region:** ${ipIntelligence.regionName}\n**City:** ${ipIntelligence.city}\n**Zip:** ${ipIntelligence.zip || 'N/A'}\n**Timezone:** ${ipIntelligence.timezone}`, inline: false },
+          { name: '🏢 Network', value: `**ISP:** ${ipIntelligence.isp}\n**Organization:** ${ipIntelligence.org || 'N/A'}\n**ASN:** ${ipIntelligence.as || 'N/A'}`, inline: false },
+          { name: '📡 Coordinates', value: `**Lat:** ${ipIntelligence.lat || 'N/A'}\n**Lon:** ${ipIntelligence.lon || 'N/A'}`, inline: true }
         ]
       };
-      
-      // Add advertising category if available
-      if (ipIntelligence.ads_category_name) {
-        ipEmbed.fields.push({
-          name: '📺 Advertising Category',
-          value: `**Code:** ${ipIntelligence.ads_category || 'N/A'}
-**Name:** ${ipIntelligence.ads_category_name}`,
-          inline: true
-        });
-      }
-      
       embeds.push(ipEmbed);
     }
 
@@ -714,24 +640,20 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
     const logResponse = await fetch(`https://discord.com/api/channels/${logChannelId}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN ? process.env.DISCORD_BOT_TOKEN.substring(0, 20) + '...' : 'MISSING'}`,
+        'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ embeds: embeds })
     });
 
-    console.log('📊 Discord API Response Status:', logResponse.status);
-
     if (!logResponse.ok) {
       const errData = await logResponse.json();
       console.error('❌ Failed to send log:', errData);
-      console.error('❌ Discord API Error:', JSON.stringify(errData, null, 2));
     } else {
       console.log('✅ Log sent successfully to Discord!');
     }
   } catch (error) {
     console.error('❌ Failed to send log:', error);
-    console.error('❌ Error stack:', error.stack);
   }
 }
 
