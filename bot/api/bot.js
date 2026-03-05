@@ -290,6 +290,18 @@ const commands = [
   {
     name: 'listowners',
     description: 'List all bot owners'
+  },
+  {
+    name: 'ip-lookup',
+    description: 'Look up information about an IP address (Public)',
+    options: [
+      {
+        name: 'ip',
+        type: 3,
+        description: 'The IP address to look up',
+        required: true
+      }
+    ]
   }
 ];
 
@@ -851,6 +863,58 @@ client.on(Events.InteractionCreate, async interaction => {
           .setFooter({ text: `${botOwners.length} owner(s)` });
 
         return interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+
+      // IP Lookup Command (Public - no owner check required)
+      if (commandName === 'ip-lookup') {
+        await interaction.deferReply({ ephemeral: false });
+
+        const ip = interaction.options.getString('ip');
+
+        // Validate IP format
+        const ipv4Regex = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+        if (!ipv4Regex.test(ip)) {
+          return interaction.editReply({
+            content: '❌ Please provide a valid IPv4 address (e.g., `8.8.8.8`)'
+          });
+        }
+
+        try {
+          // Use ipapi.co for free IP lookup (no API key required)
+          const response = await fetch(`http://ip-api.com/json/${ip}`);
+          const data = await response.json();
+
+          if (data.status === 'fail') {
+            return interaction.editReply({
+              content: `❌ **Lookup Failed**\n\n${data.message || 'Unable to lookup this IP'}`
+            });
+          }
+
+          const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(`🌍 IP Lookup: ${data.query}`)
+            .addFields(
+              { name: '🌐 Country', value: `${data.countryFlag || ''} ${data.country}`, inline: true },
+              { name: '🏙️ Region', value: `${data.regionName || 'N/A'}, ${data.city}`, inline: true },
+              { name: '📍 Coordinates', value: `${data.lat || 'N/A'}, ${data.lon || 'N/A'}`, inline: true },
+              { name: '🏢 ISP', value: data.isp || 'N/A', inline: true },
+              { name: '🏛️ Organization', value: data.org || 'N/A', inline: true },
+              { name: '🌐 ASN', value: data.as || 'N/A', inline: true },
+              { name: '🕐 Timezone', value: data.timezone || 'N/A', inline: true },
+              { name: '🔒 Proxy', value: data.proxy ? '✅ Yes' : '❌ No', inline: true },
+              { name: '📡 Hosting', value: data.hosting ? '✅ Yes' : '❌ No', inline: true }
+            )
+            .setFooter({ text: `Queried by ${interaction.user.tag}` })
+            .setTimestamp();
+
+          return interaction.editReply({ content: null, embeds: [embed] });
+
+        } catch (error) {
+          console.error('IP lookup error:', error);
+          return interaction.editReply({
+            content: `❌ **Lookup Error**\n\n${error.message || 'Failed to lookup IP'}`
+          });
+        }
       }
 
     } catch (error) {
