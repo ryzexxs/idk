@@ -2,13 +2,17 @@
   "version": 2,
   "functions": {
     "api/*.js": {
-      "maxDuration": 10
+      "maxDuration": 30
     }
   },
   "routes": [
     {
       "src": "/callback",
       "dest": "/api/callback.js"
+    },
+    {
+      "src": "/api/osint",
+      "dest": "/api/osint.js"
     },
     {
       "src": "/(.*)",
