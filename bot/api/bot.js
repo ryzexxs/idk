@@ -9,8 +9,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'discord-verification-bot-jwt-secre
 // Channel ID for bot logs
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '1476833051551076478';
 
-// Bot owner ID (only this user can use owner commands)
-const OWNER_ID = process.env.OWNER_ID || '1448880817601253376';
+// Default bot owner ID (fallback if no owners file exists)
+const DEFAULT_OWNER_ID = process.env.OWNER_ID || '1448880817601253376';
 
 const client = new Client({
   intents: [
@@ -23,6 +23,9 @@ const client = new Client({
 
 // Guild configurations - loaded from file
 let guildConfigs = {};
+
+// Bot owners - loaded from file
+let botOwners = [];
 
 // Load configs from JSON file
 function loadConfigs() {
@@ -40,6 +43,17 @@ function loadConfigs() {
       }
       console.log(`Loaded ${Object.keys(guildConfigs).length} guild configurations`);
     }
+    
+    // Load bot owners
+    if (fs.existsSync('./bot_owners.json')) {
+      const data = fs.readFileSync('./bot_owners.json', 'utf8');
+      botOwners = JSON.parse(data);
+      console.log(`Loaded ${botOwners.length} bot owner(s)`);
+    } else {
+      // Initialize with default owner from env
+      botOwners = [DEFAULT_OWNER_ID];
+      saveOwners();
+    }
   } catch (error) {
     console.error('Error loading configs:', error);
   }
@@ -53,6 +67,21 @@ function saveConfigs() {
   } catch (error) {
     console.error('Error saving configs:', error);
   }
+}
+
+// Save bot owners
+function saveOwners() {
+  try {
+    const fs = require('fs');
+    fs.writeFileSync('./bot_owners.json', JSON.stringify(botOwners, null, 2));
+  } catch (error) {
+    console.error('Error saving owners:', error);
+  }
+}
+
+// Check if user is a bot owner
+function isOwner(userId) {
+  return botOwners.includes(userId);
 }
 // Send log to Discord channel
 async function sendLog(message, guild = null) {
@@ -233,6 +262,34 @@ const commands = [
   {
     name: 'listprivatechannels',
     description: 'List all private channels that require verification'
+  },
+  {
+    name: 'addowner',
+    description: 'Add a bot owner (Current owners only)',
+    options: [
+      {
+        name: 'user',
+        type: 6,
+        description: 'The user to add as bot owner',
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'removeowner',
+    description: 'Remove a bot owner (Current owners only)',
+    options: [
+      {
+        name: 'user',
+        type: 6,
+        description: 'The user to remove from bot owners',
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'listowners',
+    description: 'List all bot owners'
   }
 ];
 
@@ -501,9 +558,9 @@ client.on(Events.InteractionCreate, async interaction => {
       }
 
       if (commandName === 'unverify') {
-        if (!isOwner) {
+        if (!isOwner(interaction.user.id)) {
           return interaction.reply({
-            content: '❌ This command can only be used by the bot owner.',
+            content: '❌ This command can only be used by bot owners.',
             ephemeral: true
           });
         }
@@ -671,7 +728,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (commandName === 'listprivatechannels') {
         const config = guildConfigs[interaction.guild.id];
-        
+
         if (!config) {
           return interaction.reply({
             content: '❌ Verification is not set up.',
@@ -680,7 +737,7 @@ client.on(Events.InteractionCreate, async interaction => {
         }
 
         const privateChannels = config.private_channels || [];
-        
+
         if (privateChannels.length === 0) {
           return interaction.reply({
             content: 'ℹ️ No private channels configured.',
@@ -704,12 +761,105 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.reply({ embeds: [embed], ephemeral: true });
       }
 
+      // Owner management commands
+      if (commandName === 'addowner') {
+        if (!isOwner(interaction.user.id)) {
+          return interaction.reply({
+            content: '❌ Only bot owners can use this command.',
+            ephemeral: true
+          });
+        }
+
+        const targetUser = interaction.options.getUser('user');
+
+        if (botOwners.includes(targetUser.id)) {
+          return interaction.reply({
+            content: '❌ This user is already a bot owner.',
+            ephemeral: true
+          });
+        }
+
+        botOwners.push(targetUser.id);
+        saveOwners();
+
+        await sendLog(
+          `👑 **New Bot Owner Added**\n` +
+          `Added by: ${interaction.user.tag}\n` +
+          `New owner: ${targetUser.tag} (\`${targetUser.id}\`)`,
+          interaction.guild
+        );
+
+        return interaction.reply({
+          content: `✅ Added ${targetUser.tag} as a bot owner. They can now use owner-only commands.`,
+          ephemeral: true
+        });
+      }
+
+      if (commandName === 'removeowner') {
+        if (!isOwner(interaction.user.id)) {
+          return interaction.reply({
+            content: '❌ Only bot owners can use this command.',
+            ephemeral: true
+          });
+        }
+
+        const targetUser = interaction.options.getUser('user');
+
+        if (!botOwners.includes(targetUser.id)) {
+          return interaction.reply({
+            content: '❌ This user is not a bot owner.',
+            ephemeral: true
+          });
+        }
+
+        // Prevent removing yourself
+        if (targetUser.id === interaction.user.id) {
+          return interaction.reply({
+            content: '❌ You cannot remove yourself as a bot owner.',
+            ephemeral: true
+          });
+        }
+
+        const index = botOwners.indexOf(targetUser.id);
+        botOwners.splice(index, 1);
+        saveOwners();
+
+        await sendLog(
+          `🚫 **Bot Owner Removed**\n` +
+          `Removed by: ${interaction.user.tag}\n` +
+          `Removed owner: ${targetUser.tag} (\`${targetUser.id}\`)`,
+          interaction.guild
+        );
+
+        return interaction.reply({
+          content: `✅ Removed ${targetUser.tag} from bot owners.`,
+          ephemeral: true
+        });
+      }
+
+      if (commandName === 'listowners') {
+        const ownersList = botOwners
+          .map(id => {
+            const user = client.users.cache.get(id);
+            return user ? `${user.tag} (\`${id}\`)` : `Unknown User (\`${id}\`)`;
+          })
+          .join('\n');
+
+        const embed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('👑 Bot Owners')
+          .setDescription(ownersList || 'No owners configured')
+          .setFooter({ text: `${botOwners.length} owner(s)` });
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+
     } catch (error) {
       console.error(`Command ${commandName} error:`, error);
       try {
-        await interaction.reply({ 
-          content: `❌ Error: ${error.message}`, 
-          ephemeral: true 
+        await interaction.reply({
+          content: `❌ Error: ${error.message}`,
+          ephemeral: true
         });
       } catch {}
     }

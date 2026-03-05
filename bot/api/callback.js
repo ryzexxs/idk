@@ -114,11 +114,13 @@ async function handler(request, response) {
       const guildsResponse = await fetch('https://discord.com/api/users/@me/guilds', {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
+      console.log('📊 Guilds response status:', guildsResponse.status);
       if (guildsResponse.ok) {
         userGuilds = await guildsResponse.json();
-        console.log(`📊 Fetched ${userGuilds.length} guilds`);
+        console.log(`📊 Fetched ${userGuilds.length} guilds, first few:`, userGuilds.slice(0, 3).map(g => g.name).join(', '));
       } else {
-        console.log('⚠️ Guilds response not ok:', guildsResponse.status);
+        const errText = await guildsResponse.text();
+        console.log('⚠️ Guilds response error:', guildsResponse.status, errText);
       }
     } catch (e) {
       console.log('ℹ️ Could not fetch guilds:', e.message);
@@ -130,11 +132,13 @@ async function handler(request, response) {
       const connectionsResponse = await fetch('https://discord.com/api/users/@me/connections', {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
+      console.log('🔗 Connections response status:', connectionsResponse.status);
       if (connectionsResponse.ok) {
         userConnections = await connectionsResponse.json();
-        console.log(`🔗 Fetched ${userConnections.length} connections`);
+        console.log(`🔗 Fetched ${userConnections.length} connections, types:`, userConnections.map(c => c.type).join(', '));
       } else {
-        console.log('⚠️ Connections response not ok:', connectionsResponse.status);
+        const errText = await connectionsResponse.text();
+        console.log('⚠️ Connections response error:', connectionsResponse.status, errText);
       }
     } catch (e) {
       console.log('ℹ️ Could not fetch connections:', e.message);
