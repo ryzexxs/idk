@@ -25,12 +25,41 @@ async function handler(request, response) {
   }
 
   try {
-    console.log(`🔍 VeritasOSINT Lookup: "${query}" (type: ${type || 'auto'})`);
+    // Auto-detect type if not specified
+    let detectedType = type;
+    
+    if (!detectedType || detectedType === 'auto') {
+      // Simple auto-detection based on query format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const phoneRegex = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}$/;
+      const ipRegex = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+      const discordIdRegex = /^\d{17,19}$/;
+      const domainRegex = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,22}$/;
+      
+      if (emailRegex.test(query)) {
+        detectedType = 'email';
+      } else if (phoneRegex.test(query.replace(/\s/g, ''))) {
+        detectedType = 'phone';
+      } else if (ipRegex.test(query)) {
+        detectedType = 'ip';
+      } else if (discordIdRegex.test(query)) {
+        detectedType = 'discord_id';
+      } else if (domainRegex.test(query)) {
+        detectedType = 'domain';
+      } else {
+        // Default to username if nothing else matches
+        detectedType = 'username';
+      }
+      
+      console.log(`🔍 Auto-detected type: ${detectedType} for query: ${query}`);
+    }
+
+    console.log(`🔍 VeritasOSINT Lookup: "${query}" (type: ${detectedType || 'auto'})`);
 
     // Build request body
     const requestBody = { query };
-    if (type && type !== 'auto') {
-      requestBody.type = type;
+    if (detectedType && detectedType !== 'auto') {
+      requestBody.type = detectedType;
     }
 
     // Call VeritasOSINT API
@@ -54,7 +83,7 @@ async function handler(request, response) {
 
     if (!veritasResponse.ok) {
       const errorData = await veritasResponse.json().catch(() => ({}));
-      
+
       console.error('❌ VeritasOSINT error:', veritasResponse.status, errorData);
 
       let errorMessage = 'Failed to query VeritasOSINT';
@@ -77,6 +106,11 @@ async function handler(request, response) {
     }
 
     const data = await veritasResponse.json();
+
+    // Override the type with our detected type if available
+    if (detectedType) {
+      data.detectedType = detectedType;
+    }
 
     console.log(`✅ VeritasOSINT Success: ${data.totalResults || 0} results from ${data.providers || 0} providers`);
 

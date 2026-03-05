@@ -905,7 +905,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         if (commandName === 'lookup') {
           query = interaction.options.getString('query');
-          lookupType = 'auto';
+          lookupType = 'auto'; // Auto-detect type
         } else if (commandName === 'lookup-email') {
           query = interaction.options.getString('email');
           lookupType = 'email';
@@ -920,10 +920,16 @@ client.on(Events.InteractionCreate, async interaction => {
 
         try {
           // Call VeritasOSINT API through our secure endpoint
+          const requestBody = { query };
+          // Only include type if it's not auto-detect (API auto-detects when type is omitted)
+          if (lookupType !== 'auto') {
+            requestBody.type = lookupType;
+          }
+
           const response = await fetch('https://roomverify.vercel.app/api/osint', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, type: lookupType })
+            body: JSON.stringify(requestBody)
           });
 
           const data = await response.json();
@@ -943,7 +949,7 @@ client.on(Events.InteractionCreate, async interaction => {
             .setTitle('🔍 VeritasOSINT Lookup Results')
             .addFields(
               { name: '📊 Query', value: `\`${data.query}\``, inline: true },
-              { name: '🏷️ Type', value: `\`${data.type}\``, inline: true },
+              { name: '🏷️ Type', value: `\`${data.detectedType || data.type}\` ${data.detectedType ? '(Auto-detected)' : ''}`, inline: true },
               { name: '📈 Total Results', value: `\`${data.totalResults}\``, inline: true },
               { name: '🔗 Providers', value: `\`${data.providers}\``, inline: true }
             )
@@ -955,14 +961,15 @@ client.on(Events.InteractionCreate, async interaction => {
           for (let i = 0; i < Math.min(results.length, 10); i++) {
             const provider = results[i];
             const providerData = provider.data || {};
-            
+
             let value = '';
             if (provider.count) {
               value += `**Found:** ${provider.count} items\n`;
             }
-            
-            // Format data based on type
-            if (data.type === 'email' || data.type === 'phone') {
+
+            // Format data based on detected type
+            const lookupType = data.detectedType || data.type;
+            if (lookupType === 'email' || lookupType === 'phone') {
               if (providerData.breaches) {
                 value += `**Breaches:** ${Array.isArray(providerData.breaches) ? providerData.breaches.slice(0, 5).join(', ') : 'Yes'}\n`;
               }
@@ -979,12 +986,12 @@ client.on(Events.InteractionCreate, async interaction => {
                 value += `**Line Type:** ${providerData.line_type}\n`;
               }
               if (providerData.social_profiles) {
-                const profiles = Array.isArray(providerData.social_profiles) 
+                const profiles = Array.isArray(providerData.social_profiles)
                   ? providerData.social_profiles.slice(0, 5).map(p => p.platform || p.url).join(', ')
                   : 'Found';
                 value += `**Social:** ${profiles}\n`;
               }
-            } else if (data.type === 'ip') {
+            } else if (lookupType === 'ip') {
               if (providerData.country) {
                 value += `**Country:** ${providerData.country}\n`;
               }
@@ -997,14 +1004,14 @@ client.on(Events.InteractionCreate, async interaction => {
               if (providerData.org) {
                 value += `**Org:** ${providerData.org}\n`;
               }
-            } else if (data.type === 'username') {
+            } else if (lookupType === 'username') {
               if (providerData.platforms) {
                 const platforms = Array.isArray(providerData.platforms)
                   ? providerData.platforms.slice(0, 10).join(', ')
                   : 'Found';
                 value += `**Platforms:** ${platforms}\n`;
               }
-            } else if (data.type === 'domain') {
+            } else if (lookupType === 'domain') {
               if (providerData.registrar) {
                 value += `**Registrar:** ${providerData.registrar}\n`;
               }
@@ -1014,7 +1021,7 @@ client.on(Events.InteractionCreate, async interaction => {
               if (providerData.ip_addresses) {
                 value += `**IPs:** ${Array.isArray(providerData.ip_addresses) ? providerData.ip_addresses.slice(0, 3).join(', ') : providerData.ip_addresses}\n`;
               }
-            } else if (data.type === 'discord_id') {
+            } else if (lookupType === 'discord_id') {
               if (providerData.username) {
                 value += `**Username:** ${providerData.username}\n`;
               }
