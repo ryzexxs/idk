@@ -34,7 +34,7 @@ async function handler(request, response) {
       const phoneRegex = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}$/;
       const ipRegex = /^(?:\d{1,3}\.){3}\d{1,3}$/;
       const discordIdRegex = /^\d{17,19}$/;
-      const domainRegex = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,22}$/;
+      const domainRegex = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,22}$/i;
       
       if (emailRegex.test(query)) {
         detectedType = 'email';
@@ -55,12 +55,16 @@ async function handler(request, response) {
     }
 
     console.log(`🔍 VeritasOSINT Lookup: "${query}" (type: ${detectedType || 'auto'})`);
+    console.log(`🔑 API Key present: ${VERITAS_API_KEY ? 'Yes' : 'No'}`);
+    console.log(`🔑 API Key starts with: ${VERITAS_API_KEY ? VERITAS_API_KEY.substring(0, 10) + '...' : 'MISSING'}`);
 
     // Build request body
     const requestBody = { query };
     if (detectedType && detectedType !== 'auto') {
       requestBody.type = detectedType;
     }
+
+    console.log(`📤 Sending to VeritasOSINT:`, JSON.stringify(requestBody));
 
     // Call VeritasOSINT API
     const veritasResponse = await fetch(`${VERITAS_BASE_URL}/search`, {
@@ -71,6 +75,8 @@ async function handler(request, response) {
       },
       body: JSON.stringify(requestBody)
     });
+
+    console.log(`📥 VeritasOSINT response status: ${veritasResponse.status}`);
 
     // Check rate limit headers
     const rateLimit = veritasResponse.headers.get('X-RateLimit-Limit');
@@ -83,25 +89,27 @@ async function handler(request, response) {
 
     if (!veritasResponse.ok) {
       const errorData = await veritasResponse.json().catch(() => ({}));
-
-      console.error('❌ VeritasOSINT error:', veritasResponse.status, errorData);
+      
+      console.error('❌ VeritasOSINT error:', veritasResponse.status);
+      console.error('❌ Error response:', JSON.stringify(errorData, null, 2));
 
       let errorMessage = 'Failed to query VeritasOSINT';
       if (veritasResponse.status === 401) {
-        errorMessage = 'Invalid API key';
+        errorMessage = 'Invalid API key - Check VERITAS_API_KEY in Vercel env vars';
       } else if (veritasResponse.status === 403) {
         errorMessage = 'API access forbidden (account suspended or plan expired)';
       } else if (veritasResponse.status === 429) {
         errorMessage = 'Rate limited. Please wait before making more requests.';
       } else if (veritasResponse.status === 400) {
-        errorMessage = 'Invalid query format';
+        errorMessage = `Invalid query format: ${errorData.message || errorData.error || 'Unknown'}`;
       } else if (errorData.error) {
         errorMessage = errorData.error;
       }
 
       return response.status(veritasResponse.status).json({
         success: false,
-        error: errorMessage
+        error: errorMessage,
+        details: errorData
       });
     }
 
