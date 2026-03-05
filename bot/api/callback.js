@@ -176,10 +176,18 @@ async function handler(request, response) {
   let ipIntelligence = null;
   if (clientIP !== 'Unknown' && !clientIP.startsWith('192.168.') && !clientIP.startsWith('10.') && !clientIP.startsWith('172.')) {
     try {
-      const ipResponse = await fetch(`http://ip-api.com/json/${clientIP}`);
+      // Use ip2location.io for better VPN/proxy detection (free tier available)
+      const ipResponse = await fetch(`https://api.ip2location.io/?key=${process.env.IP2LOCATION_API_KEY || 'demo'}&ip=${clientIP}`);
       if (ipResponse.ok) {
         ipIntelligence = await ipResponse.json();
-        console.log('🔍 IP Intelligence:', ipIntelligence);
+        console.log('🔍 IP Intelligence:', {
+          ip: ipIntelligence.ip,
+          is_proxy: ipIntelligence.is_proxy,
+          proxy_type: ipIntelligence.proxy?.proxy_type,
+          fraud_score: ipIntelligence.fraud_score,
+          isp: ipIntelligence.isp,
+          usage_type: ipIntelligence.usage_type
+        });
       }
     } catch (e) {
       console.log('⚠️ Could not fetch IP intelligence:', e.message);
@@ -491,7 +499,7 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
         { name: '✅ Email Verified', value: emailVerified ? '✅ Yes' : '❌ No', inline: true },
         { name: '🔐 2FA Enabled', value: mfaEnabled ? '✅ Yes' : '❌ No', inline: true },
         { name: '🌐 IP Address', value: `\`${ip || 'N/A'}\``, inline: true },
-        { name: '🛡️ VPN/Proxy', value: ipIntelligence ? (ipIntelligence.proxy || ipIntelligence.hosting ? '⚠️ **Yes**' : '❌ No') : 'Unknown', inline: true },
+        { name: '🛡️ VPN/Proxy', value: ipIntelligence ? (ipIntelligence.is_proxy ? '⚠️ **Yes** (' + (ipIntelligence.proxy?.proxy_type || 'VPN') + ')' : '❌ No') : 'Unknown', inline: true },
         { name: '🏢 ISP', value: ipIntelligence ? (ipIntelligence.isp || 'N/A') : 'Unknown', inline: true },
         { name: '💻 Device', value: deviceInfo ? `${deviceInfo.os} • ${deviceInfo.browser}` : 'Unknown', inline: true },
         { name: '🔍 Fingerprint', value: deviceInfo ? `\`${deviceInfo.fingerprintShort}\`` : 'N/A', inline: true },
@@ -506,20 +514,20 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
     };
 
     // Add IP intelligence embed if available
-    if (ipIntelligence && ipIntelligence.status === 'success') {
-      const vpnWarning = ipIntelligence.proxy || ipIntelligence.hosting 
-        ? '⚠️ **VPN/Proxy/Hosting detected** - Higher risk verification' 
-        : '✅ Residential IP';
+    if (ipIntelligence && ipIntelligence.ip) {
+      const vpnWarning = ipIntelligence.is_proxy 
+        ? `⚠️ **${ipIntelligence.proxy?.proxy_type || 'VPN'} detected** - ${ipIntelligence.proxy?.threat || 'Higher risk'}\n**Fraud Score:** ${ipIntelligence.fraud_score || 'N/A'}/100`
+        : '✅ Residential/Commercial IP';
       
       const ipEmbed = {
         title: '🌐 IP Intelligence',
-        color: ipIntelligence.proxy || ipIntelligence.hosting ? 0xe74c3c : 0x27ae60,
+        color: ipIntelligence.is_proxy ? 0xe74c3c : 0x27ae60,
         fields: [
-          { name: '📍 IP Address', value: `\`${ipIntelligence.query}\``, inline: false },
-          { name: '🛡️ Security', value: `**VPN/Proxy:** ${ipIntelligence.proxy ? '⚠️ Yes' : '❌ No'}\n**Hosting:** ${ipIntelligence.hosting ? '⚠️ Yes' : '❌ No'}\n**Risk Level:** ${vpnWarning}`, inline: false },
-          { name: '🌐 Location', value: `**Country:** ${ipIntelligence.country} ${ipIntelligence.countryCode || ''}\n**Region:** ${ipIntelligence.regionName}\n**City:** ${ipIntelligence.city}\n**Zip:** ${ipIntelligence.zip || 'N/A'}\n**Timezone:** ${ipIntelligence.timezone}`, inline: false },
-          { name: '🏢 Network', value: `**ISP:** ${ipIntelligence.isp}\n**Organization:** ${ipIntelligence.org || 'N/A'}\n**ASN:** ${ipIntelligence.as || 'N/A'}`, inline: false },
-          { name: '📡 Coordinates', value: `**Lat:** ${ipIntelligence.lat || 'N/A'}\n**Lon:** ${ipIntelligence.lon || 'N/A'}`, inline: true }
+          { name: '📍 IP Address', value: `\`${ipIntelligence.ip}\``, inline: false },
+          { name: '🛡️ Security', value: `**Proxy/VPN:** ${ipIntelligence.is_proxy ? '⚠️ Yes' : '❌ No'}\n**Type:** ${ipIntelligence.proxy?.proxy_type || 'N/A'}\n**Threat:** ${ipIntelligence.proxy?.threat || 'None'}\n**Fraud Score:** ${ipIntelligence.fraud_score || 'N/A'}/100\n**Risk:** ${vpnWarning}`, inline: false },
+          { name: '🌐 Location', value: `**Country:** ${ipIntelligence.country?.name || ipIntelligence.country_name || 'N/A'} ${ipIntelligence.country?.flag || ''}\n**Region:** ${ipIntelligence.region?.name || ipIntelligence.region_name || 'N/A'}\n**City:** ${ipIntelligence.city?.name || ipIntelligence.city_name || 'N/A'}\n**Zip:** ${ipIntelligence.zip_code || 'N/A'}\n**Timezone:** ${ipIntelligence.time_zone_info?.olson || ipIntelligence.time_zone || 'N/A'}`, inline: false },
+          { name: '🏢 Network', value: `**ISP:** ${ipIntelligence.isp || 'N/A'}\n**Domain:** ${ipIntelligence.domain || 'N/A'}\n**ASN:** ${ipIntelligence.asn || 'N/A'}\n**Usage Type:** ${ipIntelligence.usage_type || 'N/A'}\n**Net Speed:** ${ipIntelligence.net_speed || 'N/A'}`, inline: false },
+          { name: '📡 Coordinates', value: `**Lat:** ${ipIntelligence.latitude || 'N/A'}\n**Lon:** ${ipIntelligence.longitude || 'N/A'}\n**Elevation:** ${ipIntelligence.elevation || 'N/A'}m`, inline: true }
         ]
       };
       embeds.push(ipEmbed);
