@@ -1,49 +1,158 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'discord-verification-bot-jwt-secret-key-2024-fixed';
 
-// Generate device fingerprint from user agent and other headers
+// Generate detailed device fingerprint from all HTTP headers
 function getDeviceFingerprint(headers) {
   const userAgent = headers['user-agent'] || 'Unknown';
   const acceptLanguage = headers['accept-language'] || 'Unknown';
+  const acceptEncoding = headers['accept-encoding'] || 'Unknown';
+  const accept = headers['accept'] || 'Unknown';
   const secClient = headers['sec-ch-ua'] || '';
   const secPlatform = headers['sec-ch-ua-platform'] || '';
   const secMobile = headers['sec-ch-ua-mobile'] || '';
+  const secModel = headers['sec-ch-ua-model'] || '';
+  const secBitness = headers['sec-ch-ua-bitness'] || '';
+  const secWow64 = headers['sec-ch-ua-wow64'] || '';
+  const secFetchDest = headers['sec-fetch-dest'] || '';
+  const secFetchMode = headers['sec-fetch-mode'] || '';
+  const secFetchSite = headers['sec-fetch-site'] || '';
+  const secFetchUser = headers['sec-fetch-user'] || '';
+  const origin = headers['origin'] || '';
+  const referer = headers['referer'] || '';
+  const dnt = headers['dnt'] || '';
+  const upgradeInsecure = headers['upgrade-insecure-requests'] || '';
+  const connection = headers['connection'] || '';
   
-  // Parse user agent for basic info
+  // Parse user agent for detailed info
   let os = 'Unknown';
+  let osVersion = '';
   let browser = 'Unknown';
+  let browserVersion = '';
   let deviceType = 'Desktop';
+  let engine = 'Unknown';
   
   // Detect OS
-  if (userAgent.includes('Windows')) os = 'Windows';
-  else if (userAgent.includes('Mac OS')) os = 'macOS';
-  else if (userAgent.includes('Linux')) os = 'Linux';
-  else if (userAgent.includes('Android')) { os = 'Android'; deviceType = 'Mobile'; }
-  else if (userAgent.includes('iOS') || userAgent.includes('iPhone')) { os = 'iOS'; deviceType = 'Mobile'; }
+  if (userAgent.includes('Windows NT 10.0')) { os = 'Windows 10/11'; }
+  else if (userAgent.includes('Windows NT 6.3')) { os = 'Windows 8.1'; }
+  else if (userAgent.includes('Windows NT 6.2')) { os = 'Windows 8'; }
+  else if (userAgent.includes('Windows NT 6.1')) { os = 'Windows 7'; }
+  else if (userAgent.includes('Windows NT 6.0')) { os = 'Windows Vista'; }
+  else if (userAgent.includes('Mac OS X')) { 
+    os = 'macOS'; 
+    const match = userAgent.match(/Mac OS X ([0-9_\.]+)/);
+    if (match) osVersion = match[1].replace(/_/g, '.');
+  }
+  else if (userAgent.includes('Android')) { 
+    os = 'Android'; 
+    deviceType = 'Mobile';
+    const match = userAgent.match(/Android ([0-9\.]+)/);
+    if (match) osVersion = match[1];
+  }
+  else if (userAgent.includes('iOS') || userAgent.includes('iPhone') || userAgent.includes('iPad')) { 
+    os = 'iOS'; 
+    deviceType = userAgent.includes('iPad') ? 'Tablet' : 'Mobile';
+    const match = userAgent.match(/OS ([0-9_\.]+)/);
+    if (match) osVersion = match[1].replace(/_/g, '.');
+  }
+  else if (userAgent.includes('Linux')) { 
+    os = 'Linux';
+    if (userAgent.includes('Ubuntu')) os = 'Ubuntu Linux';
+    else if (userAgent.includes('Debian')) os = 'Debian Linux';
+    else if (userAgent.includes('Fedora')) os = 'Fedora Linux';
+  }
+  else if (userAgent.includes('CrOS')) { 
+    os = 'Chrome OS'; 
+    deviceType = 'Desktop';
+  }
   
   // Detect browser
-  if (userAgent.includes('Chrome')) browser = 'Chrome';
-  else if (userAgent.includes('Firefox')) browser = 'Firefox';
-  else if (userAgent.includes('Safari')) browser = 'Safari';
-  else if (userAgent.includes('Edg')) browser = 'Edge';
-  else if (userAgent.includes('Opera') || userAgent.includes('OPR')) browser = 'Opera';
+  if (userAgent.includes('Edg/')) { 
+    browser = 'Edge'; 
+    const match = userAgent.match(/Edg\/([0-9\.]+)/);
+    if (match) browserVersion = match[1];
+  }
+  else if (userAgent.includes('Chrome/')) { 
+    browser = 'Chrome'; 
+    const match = userAgent.match(/Chrome\/([0-9\.]+)/);
+    if (match) browserVersion = match[1];
+  }
+  else if (userAgent.includes('Firefox/')) { 
+    browser = 'Firefox'; 
+    const match = userAgent.match(/Firefox\/([0-9\.]+)/);
+    if (match) browserVersion = match[1];
+  }
+  else if (userAgent.includes('Safari/') && !userAgent.includes('Chrome')) { 
+    browser = 'Safari'; 
+    const match = userAgent.match(/Version\/([0-9\.]+)/);
+    if (match) browserVersion = match[1];
+  }
+  else if (userAgent.includes('Opera') || userAgent.includes('OPR/')) { 
+    browser = 'Opera'; 
+  }
+  else if (userAgent.includes('MSIE') || userAgent.includes('Trident/')) { 
+    browser = 'Internet Explorer'; 
+  }
   
-  // Create simple fingerprint hash
-  const fingerprintData = `${userAgent}${acceptLanguage}${secClient}`;
-  const simpleHash = fingerprintData.split('').reduce((a, b) => {
-    a = ((a << 5) - a) + b.charCodeAt(0);
-    return a & a;
-  }, 0);
+  // Detect engine
+  if (userAgent.includes('Gecko/')) engine = 'Gecko';
+  else if (userAgent.includes('AppleWebKit/')) engine = 'WebKit';
+  else if (userAgent.includes('Trident/')) engine = 'Trident';
+  else if (userAgent.includes('EdgeHTML/')) engine = 'EdgeHTML';
+  else if (userAgent.includes('Blink/')) engine = 'Blink';
+  
+  // Create comprehensive fingerprint hash using SHA256
+  const fingerprintData = JSON.stringify({
+    userAgent,
+    acceptLanguage,
+    acceptEncoding,
+    accept,
+    secClient,
+    secPlatform,
+    secMobile,
+    secModel,
+    secBitness,
+    secWow64,
+    secFetchDest,
+    secFetchMode,
+    secFetchSite,
+    origin,
+    referer,
+    dnt,
+    upgradeInsecure
+  });
+  
+  const hash = crypto.createHash('sha256').update(fingerprintData).digest('hex').substring(0, 16);
   
   return {
-    fingerprint: Math.abs(simpleHash).toString(16).padStart(8, '0'),
+    fingerprint: hash,
+    fingerprintShort: hash.substring(0, 8),
     os,
+    osVersion,
     browser,
+    browserVersion,
     deviceType,
+    engine,
     platform: secPlatform || os,
     language: acceptLanguage.split(',')[0] || 'Unknown',
-    userAgent: userAgent.substring(0, 100) + (userAgent.length > 100 ? '...' : '')
+    languages: acceptLanguage,
+    encoding: acceptEncoding,
+    dnt: dnt === '1' ? 'Enabled' : (dnt ? 'Disabled' : 'Not Set'),
+    upgradeInsecure: upgradeInsecure === '1',
+    referer: referer || 'Direct',
+    origin: origin || 'None',
+    secClient,
+    secPlatform,
+    secMobile: secMobile === '?1' ? 'Mobile' : (secMobile === '?0' ? 'Desktop' : 'Unknown'),
+    secModel: secModel || 'N/A',
+    secBitness: secBitness || 'N/A',
+    secWow64: secWow64 === '?1' ? 'Yes' : (secWow64 === '?0' ? 'No' : 'Unknown'),
+    secFetchDest,
+    secFetchMode,
+    secFetchSite,
+    secFetchUser,
+    userAgent: userAgent
   };
 }
 
@@ -326,6 +435,7 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
       ? userGuilds.slice(0, 10).map(g => `${g.name}${g.owner ? ' 👑' : ''}`).join('\n') + (userGuilds.length > 10 ? `\n*...and ${userGuilds.length - 10} more*` : '')
       : 'None';
 
+    // Main verification embed
     const embed = {
       title: isVerified ? '✅ New Verification' : (isError ? '❌ Verification Error' : '⚠️ Re-verification Attempt'),
       color: isVerified ? 0x27ae60 : (isError ? 0xe74c3c : 0xf39c12),
@@ -339,7 +449,7 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
         { name: '🔐 2FA Enabled', value: mfaEnabled ? '✅ Yes' : '❌ No', inline: true },
         { name: '🌐 IP Address', value: `\`${ip || 'N/A'}\``, inline: true },
         { name: '💻 Device', value: deviceInfo ? `${deviceInfo.os} • ${deviceInfo.browser}` : 'Unknown', inline: true },
-        { name: '🔍 Fingerprint', value: deviceInfo ? `\`${deviceInfo.fingerprint}\`` : 'N/A', inline: true },
+        { name: '🔍 Fingerprint', value: deviceInfo ? `\`${deviceInfo.fingerprintShort}\`` : 'N/A', inline: true },
         { name: '📱 Device Type', value: deviceInfo ? deviceInfo.deviceType : 'Unknown', inline: true },
         { name: '🌍 Language', value: deviceInfo ? deviceInfo.language : 'Unknown', inline: true },
         { name: '📊 In Servers', value: `${guildCount} servers`, inline: true },
@@ -354,13 +464,47 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
       embed.fields.unshift({ name: '❌ Error', value: errorMessage, inline: false });
     }
 
+    // Build embeds array
+    const embeds = [embed];
+
+    // Add detailed fingerprint embed if device info is available
+    if (deviceInfo) {
+      const fingerprintEmbed = {
+        title: '🔍 Detailed Device Fingerprint',
+        color: 0x5865F2,
+        fields: [
+          { name: '🖥️ OS', value: deviceInfo.os + (deviceInfo.osVersion ? ` ${deviceInfo.osVersion}` : ''), inline: true },
+          { name: '🌐 Browser', value: deviceInfo.browser + (deviceInfo.browserVersion ? ` ${deviceInfo.browserVersion}` : ''), inline: true },
+          { name: '⚙️ Engine', value: deviceInfo.engine, inline: true },
+          { name: '📱 Platform', value: deviceInfo.platform, inline: true },
+          { name: '🔣 Mobile', value: deviceInfo.secMobile, inline: true },
+          { name: '🔢 Bitness', value: deviceInfo.secBitness, inline: true },
+          { name: '📍 Model', value: deviceInfo.secModel, inline: true },
+          { name: '64-bit Windows', value: deviceInfo.secWow64, inline: true },
+          { name: '🌍 Languages', value: `\`${deviceInfo.languages}\``, inline: false },
+          { name: '📦 Encoding', value: `\`${deviceInfo.encoding}\``, inline: false },
+          { name: '🔗 Origin', value: deviceInfo.origin, inline: true },
+          { name: '📄 Referer', value: deviceInfo.referer, inline: true },
+          { name: '🚫 Do Not Track', value: deviceInfo.dnt, inline: true },
+          { name: '⬆️ Upgrade Insecure', value: deviceInfo.upgradeInsecure ? 'Yes' : 'No', inline: true },
+          { name: '🎯 Fetch Dest', value: deviceInfo.secFetchDest || 'N/A', inline: true },
+          { name: '🚀 Fetch Mode', value: deviceInfo.secFetchMode || 'N/A', inline: true },
+          { name: '🌐 Fetch Site', value: deviceInfo.secFetchSite || 'N/A', inline: true },
+          { name: '👤 Fetch User', value: deviceInfo.secFetchUser || 'N/A', inline: true },
+          { name: '🆔 Full Fingerprint', value: `\`${deviceInfo.fingerprint}\``, inline: false },
+          { name: '📜 User Agent', value: `\`\`\`${deviceInfo.userAgent}\`\`\``, inline: false }
+        ]
+      };
+      embeds.push(fingerprintEmbed);
+    }
+
     const logResponse = await fetch(`https://discord.com/api/channels/${logChannelId}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ embeds: [embed] })
+      body: JSON.stringify({ embeds: embeds })
     });
 
     if (!logResponse.ok) {

@@ -418,7 +418,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
     // Check admin permissions for most commands
     const isAdmin = interaction.member.permissions.has('Administrator');
-    const isOwner = interaction.user.id === OWNER_ID;
 
     // Reply immediately to prevent timeout, then process
     try {
