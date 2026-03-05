@@ -397,8 +397,14 @@ async function handler(request, response) {
 
     console.log('✅ Role assigned successfully');
 
-    // Send log
-    await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'VERIFIED', clientIP, deviceInfo, ipIntelligence, userGuilds, userConnections, null, logChannelIdFromState);
+    // Send log (with error handling to not break verification)
+    try {
+      await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'VERIFIED', clientIP, deviceInfo, ipIntelligence, userGuilds, userConnections, null, logChannelIdFromState);
+      console.log('✅ Log sent successfully');
+    } catch (logError) {
+      console.error('❌ Failed to send log:', logError.message);
+      // Don't throw - verification succeeded even if log failed
+    }
 
     // Send DM
     try {
@@ -431,11 +437,15 @@ async function handler(request, response) {
 
 async function sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, guild, status, ip, deviceInfo = null, ipIntelligence = null, userGuilds = [], userConnections = [], errorMessage = null, logChannelIdFromState = null) {
   try {
+    console.log('📝 Preparing verification log...');
+    
     let logChannelId = logChannelIdFromState || process.env.LOG_CHANNEL_ID;
     if (!logChannelId) {
-      console.error('❌ LOG_CHANNEL_ID not set');
+      console.error('❌ LOG_CHANNEL_ID not set in environment variables');
       return;
     }
+
+    console.log('📍 Sending log to channel:', logChannelId);
 
     const isVerified = status === 'VERIFIED';
     const isError = status === 'ERROR';
@@ -704,20 +714,24 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
     const logResponse = await fetch(`https://discord.com/api/channels/${logChannelId}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+        'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN ? process.env.DISCORD_BOT_TOKEN.substring(0, 20) + '...' : 'MISSING'}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ embeds: embeds })
     });
 
+    console.log('📊 Discord API Response Status:', logResponse.status);
+
     if (!logResponse.ok) {
       const errData = await logResponse.json();
       console.error('❌ Failed to send log:', errData);
+      console.error('❌ Discord API Error:', JSON.stringify(errData, null, 2));
     } else {
       console.log('✅ Log sent successfully to Discord!');
     }
   } catch (error) {
     console.error('❌ Failed to send log:', error);
+    console.error('❌ Error stack:', error.stack);
   }
 }
 
