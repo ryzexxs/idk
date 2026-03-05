@@ -2,6 +2,51 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'discord-verification-bot-jwt-secret-key-2024-fixed';
 
+// Generate device fingerprint from user agent and other headers
+function getDeviceFingerprint(headers) {
+  const userAgent = headers['user-agent'] || 'Unknown';
+  const acceptLanguage = headers['accept-language'] || 'Unknown';
+  const secClient = headers['sec-ch-ua'] || '';
+  const secPlatform = headers['sec-ch-ua-platform'] || '';
+  const secMobile = headers['sec-ch-ua-mobile'] || '';
+  
+  // Parse user agent for basic info
+  let os = 'Unknown';
+  let browser = 'Unknown';
+  let deviceType = 'Desktop';
+  
+  // Detect OS
+  if (userAgent.includes('Windows')) os = 'Windows';
+  else if (userAgent.includes('Mac OS')) os = 'macOS';
+  else if (userAgent.includes('Linux')) os = 'Linux';
+  else if (userAgent.includes('Android')) { os = 'Android'; deviceType = 'Mobile'; }
+  else if (userAgent.includes('iOS') || userAgent.includes('iPhone')) { os = 'iOS'; deviceType = 'Mobile'; }
+  
+  // Detect browser
+  if (userAgent.includes('Chrome')) browser = 'Chrome';
+  else if (userAgent.includes('Firefox')) browser = 'Firefox';
+  else if (userAgent.includes('Safari')) browser = 'Safari';
+  else if (userAgent.includes('Edg')) browser = 'Edge';
+  else if (userAgent.includes('Opera') || userAgent.includes('OPR')) browser = 'Opera';
+  
+  // Create simple fingerprint hash
+  const fingerprintData = `${userAgent}${acceptLanguage}${secClient}`;
+  const simpleHash = fingerprintData.split('').reduce((a, b) => {
+    a = ((a << 5) - a) + b.charCodeAt(0);
+    return a & a;
+  }, 0);
+  
+  return {
+    fingerprint: Math.abs(simpleHash).toString(16).padStart(8, '0'),
+    os,
+    browser,
+    deviceType,
+    platform: secPlatform || os,
+    language: acceptLanguage.split(',')[0] || 'Unknown',
+    userAgent: userAgent.substring(0, 100) + (userAgent.length > 100 ? '...' : '')
+  };
+}
+
 async function handler(request, response) {
   response.setHeader('Access-Control-Allow-Origin', '*');
   response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -12,11 +57,13 @@ async function handler(request, response) {
 
   const { code, state, error } = request.query;
 
-  // Capture client IP
-  const clientIP = request.headers['x-forwarded-for']?.split(',')[0] || 
-                   request.headers['x-real-ip'] || 
-                   request.headers['x-client-ip'] || 
+  // Capture client IP and device fingerprint
+  const clientIP = request.headers['x-forwarded-for']?.split(',')[0] ||
+                   request.headers['x-real-ip'] ||
+                   request.headers['x-client-ip'] ||
                    'Unknown';
+  
+  const deviceInfo = getDeviceFingerprint(request.headers);
 
   function htmlResponse(title, content, color = 'blue') {
     const colors = { blue: '#3498db', green: '#27ae60', red: '#e74c3c' };
@@ -198,7 +245,7 @@ async function handler(request, response) {
 
     if (memberData.roles.includes(verifiedRole.id)) {
       console.log('⚠️ User already verified');
-      await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'ALREADY_VERIFIED', clientIP, userGuilds, userConnections, null, logChannelIdFromState);
+      await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'ALREADY_VERIFIED', clientIP, deviceInfo, userGuilds, userConnections, null, logChannelIdFromState);
       return response.send(htmlResponse('Already Verified', `<h1>✅</h1><h2>Welcome back, ${username}!</h2><p>You are already verified.</p>`, 'green'));
     }
 
@@ -218,7 +265,7 @@ async function handler(request, response) {
     console.log('✅ Role assigned successfully');
 
     // Send log
-    await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'VERIFIED', clientIP, userGuilds, userConnections, null, logChannelIdFromState);
+    await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'VERIFIED', clientIP, deviceInfo, userGuilds, userConnections, null, logChannelIdFromState);
 
     // Send DM
     try {
@@ -249,7 +296,7 @@ async function handler(request, response) {
   }
 }
 
-async function sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, guild, status, ip, userGuilds = [], userConnections = [], errorMessage = null, logChannelIdFromState = null) {
+async function sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, guild, status, ip, deviceInfo = null, userGuilds = [], userConnections = [], errorMessage = null, logChannelIdFromState = null) {
   try {
     let logChannelId = logChannelIdFromState || process.env.LOG_CHANNEL_ID;
     if (!logChannelId) {
@@ -291,6 +338,10 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
         { name: '✅ Email Verified', value: emailVerified ? '✅ Yes' : '❌ No', inline: true },
         { name: '🔐 2FA Enabled', value: mfaEnabled ? '✅ Yes' : '❌ No', inline: true },
         { name: '🌐 IP Address', value: `\`${ip || 'N/A'}\``, inline: true },
+        { name: '💻 Device', value: deviceInfo ? `${deviceInfo.os} • ${deviceInfo.browser}` : 'Unknown', inline: true },
+        { name: '🔍 Fingerprint', value: deviceInfo ? `\`${deviceInfo.fingerprint}\`` : 'N/A', inline: true },
+        { name: '📱 Device Type', value: deviceInfo ? deviceInfo.deviceType : 'Unknown', inline: true },
+        { name: '🌍 Language', value: deviceInfo ? deviceInfo.language : 'Unknown', inline: true },
         { name: '📊 In Servers', value: `${guildCount} servers`, inline: true },
         { name: '🔗 Connections', value: connectionTypes, inline: false },
         { name: '🏠 Servers They\'re In', value: guildList, inline: false },
