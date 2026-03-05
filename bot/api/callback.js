@@ -176,8 +176,9 @@ async function handler(request, response) {
   let ipIntelligence = null;
   if (clientIP !== 'Unknown' && !clientIP.startsWith('192.168.') && !clientIP.startsWith('10.') && !clientIP.startsWith('172.')) {
     try {
-      // Use ip2location.io for better VPN/proxy detection (free tier available)
-      const ipResponse = await fetch(`https://api.ip2location.io/?key=${process.env.IP2LOCATION_API_KEY || 'demo'}&ip=${clientIP}`);
+      // Use ip2location.io Security plan for comprehensive VPN/proxy detection
+      const apiKey = process.env.IP2LOCATION_API_KEY || 'demo';
+      const ipResponse = await fetch(`https://api.ip2location.io/?key=${apiKey}&ip=${clientIP}`);
       if (ipResponse.ok) {
         ipIntelligence = await ipResponse.json();
         console.log('🔍 IP Intelligence:', {
@@ -185,6 +186,7 @@ async function handler(request, response) {
           is_proxy: ipIntelligence.is_proxy,
           proxy_type: ipIntelligence.proxy?.proxy_type,
           fraud_score: ipIntelligence.fraud_score,
+          threat: ipIntelligence.proxy?.threat,
           isp: ipIntelligence.isp,
           usage_type: ipIntelligence.usage_type
         });
@@ -515,21 +517,81 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
 
     // Add IP intelligence embed if available
     if (ipIntelligence && ipIntelligence.ip) {
-      const vpnWarning = ipIntelligence.is_proxy 
-        ? `⚠️ **${ipIntelligence.proxy?.proxy_type || 'VPN'} detected** - ${ipIntelligence.proxy?.threat || 'Higher risk'}\n**Fraud Score:** ${ipIntelligence.fraud_score || 'N/A'}/100`
-        : '✅ Residential/Commercial IP';
+      const proxy = ipIntelligence.proxy || {};
+      
+      // Build detailed proxy detection status
+      const proxyDetections = [];
+      if (proxy.is_vpn) proxyDetections.push('🔒 VPN');
+      if (proxy.is_tor) proxyDetections.push('🧅 Tor');
+      if (proxy.is_data_center) proxyDetections.push('🏢 Data Center');
+      if (proxy.is_public_proxy) proxyDetections.push('🌐 Public Proxy');
+      if (proxy.is_web_proxy) proxyDetections.push('🕸️ Web Proxy');
+      if (proxy.is_residential_proxy) proxyDetections.push('🏠 Residential Proxy');
+      if (proxy.is_consumer_privacy_network) proxyDetections.push('🔐 Consumer Privacy Network');
+      if (proxy.is_enterprise_private_network) proxyDetections.push('🏢 Enterprise Network');
+      if (proxy.is_spammer) proxyDetections.push('⚠️ Spammer');
+      if (proxy.is_scanner) proxyDetections.push('🔍 Scanner');
+      if (proxy.is_botnet) proxyDetections.push('🤖 Botnet');
+      if (proxy.is_web_crawler) proxyDetections.push('🕷️ Web Crawler');
+      
+      const riskLevel = ipIntelligence.fraud_score >= 75 ? '🔴 **HIGH**' : 
+                        ipIntelligence.fraud_score >= 50 ? '🟠 **MEDIUM**' : 
+                        ipIntelligence.fraud_score >= 25 ? '🟡 **LOW**' : '🟢 **VERY LOW**';
       
       const ipEmbed = {
-        title: '🌐 IP Intelligence',
+        title: '🌐 IP Intelligence Report',
         color: ipIntelligence.is_proxy ? 0xe74c3c : 0x27ae60,
+        thumbnail: { url: ipIntelligence.country?.flag || undefined },
         fields: [
           { name: '📍 IP Address', value: `\`${ipIntelligence.ip}\``, inline: false },
-          { name: '🛡️ Security', value: `**Proxy/VPN:** ${ipIntelligence.is_proxy ? '⚠️ Yes' : '❌ No'}\n**Type:** ${ipIntelligence.proxy?.proxy_type || 'N/A'}\n**Threat:** ${ipIntelligence.proxy?.threat || 'None'}\n**Fraud Score:** ${ipIntelligence.fraud_score || 'N/A'}/100\n**Risk:** ${vpnWarning}`, inline: false },
-          { name: '🌐 Location', value: `**Country:** ${ipIntelligence.country?.name || ipIntelligence.country_name || 'N/A'} ${ipIntelligence.country?.flag || ''}\n**Region:** ${ipIntelligence.region?.name || ipIntelligence.region_name || 'N/A'}\n**City:** ${ipIntelligence.city?.name || ipIntelligence.city_name || 'N/A'}\n**Zip:** ${ipIntelligence.zip_code || 'N/A'}\n**Timezone:** ${ipIntelligence.time_zone_info?.olson || ipIntelligence.time_zone || 'N/A'}`, inline: false },
-          { name: '🏢 Network', value: `**ISP:** ${ipIntelligence.isp || 'N/A'}\n**Domain:** ${ipIntelligence.domain || 'N/A'}\n**ASN:** ${ipIntelligence.asn || 'N/A'}\n**Usage Type:** ${ipIntelligence.usage_type || 'N/A'}\n**Net Speed:** ${ipIntelligence.net_speed || 'N/A'}`, inline: false },
-          { name: '📡 Coordinates', value: `**Lat:** ${ipIntelligence.latitude || 'N/A'}\n**Lon:** ${ipIntelligence.longitude || 'N/A'}\n**Elevation:** ${ipIntelligence.elevation || 'N/A'}m`, inline: true }
+          
+          { name: '🛡️ Security Analysis', value: `**Proxy Detected:** ${ipIntelligence.is_proxy ? '⚠️ Yes' : '❌ No'}
+**Proxy Type:** ${proxy.proxy_type || 'N/A'}
+**Threat Level:** ${proxy.threat !== '-' ? '⚠️ ' + proxy.threat : '✅ None'}
+**Fraud Score:** ${ipIntelligence.fraud_score}/100
+**Risk Level:** ${riskLevel}`, inline: false },
+          
+          { name: '🔍 Proxy Detection', value: proxyDetections.length > 0 
+            ? proxyDetections.join(' • ') 
+            : '✅ No proxy types detected', inline: false },
+          
+          { name: '🌐 Location', value: `**Country:** ${ipIntelligence.country?.name || ipIntelligence.country_name || 'N/A'} ${ipIntelligence.country?.flag || ''}
+**Region:** ${ipIntelligence.region?.name || ipIntelligence.region_name || 'N/A'}
+**City:** ${ipIntelligence.city?.name || ipIntelligence.city_name || 'N/A'}
+**District:** ${ipIntelligence.district || 'N/A'}
+**Zip:** ${ipIntelligence.zip_code || 'N/A'}
+**Timezone:** ${ipIntelligence.time_zone_info?.olson || ipIntelligence.time_zone || 'N/A'}`, inline: false },
+          
+          { name: '🏢 Network Information', value: `**ISP:** ${ipIntelligence.isp || 'N/A'}
+**Domain:** ${ipIntelligence.domain || 'N/A'}
+**ASN:** ${ipIntelligence.asn || 'N/A'} (${ipIntelligence.as || 'N/A'})
+**Usage Type:** ${ipIntelligence.usage_type || 'N/A'}
+**Net Speed:** ${ipIntelligence.net_speed || 'N/A'}
+**Address Type:** ${ipIntelligence.address_type || 'N/A'}`, inline: false },
+          
+          { name: '📡 Coordinates & Elevation', value: `**Latitude:** ${ipIntelligence.latitude || 'N/A'}
+**Longitude:** ${ipIntelligence.longitude || 'N/A'}
+**Elevation:** ${ipIntelligence.elevation || 'N/A'}m`, inline: true },
+          
+          { name: '📱 Mobile Info', value: `**MCC:** ${ipIntelligence.mcc || 'N/A'}
+**MNC:** ${ipIntelligence.mnc || 'N/A'}
+**Mobile Brand:** ${ipIntelligence.mobile_brand || 'N/A'}`, inline: true },
+          
+          { name: '🌤️ Weather Station', value: `**Station:** ${ipIntelligence.weather_station_name || 'N/A'}
+**Code:** ${ipIntelligence.weather_station_code || 'N/A'}`, inline: true }
         ]
       };
+      
+      // Add advertising category if available
+      if (ipIntelligence.ads_category_name) {
+        ipEmbed.fields.push({
+          name: '📺 Advertising Category',
+          value: `**Code:** ${ipIntelligence.ads_category || 'N/A'}
+**Name:** ${ipIntelligence.ads_category_name}`,
+          inline: true
+        });
+      }
+      
       embeds.push(ipEmbed);
     }
 
