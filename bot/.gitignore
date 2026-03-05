@@ -1,6 +1,0 @@
-node_modules/
-.env
-.vercel
-guild_configs.json
-*.log
-.DS_Store
