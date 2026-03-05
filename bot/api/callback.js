@@ -387,12 +387,20 @@ async function handler(request, response) {
 
     console.log('✅ Role assigned successfully');
 
-    // Send log (with error handling to not break verification)
+    // Send log (with detailed error handling)
+    console.log('📝 Preparing to send verification log...');
+    console.log('📊 User:', userId, username);
+    console.log('📊 Guild:', userGuild?.name, guildId);
+    console.log('📊 IP:', clientIP);
+    console.log('📊 Guilds fetched:', userGuilds?.length || 0);
+    console.log('📊 Connections fetched:', userConnections?.length || 0);
+    
     try {
       await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'VERIFIED', clientIP, deviceInfo, ipIntelligence, userGuilds, userConnections, null, logChannelIdFromState);
       console.log('✅ Log sent successfully');
     } catch (logError) {
-      console.error('❌ Failed to send log:', logError.message);
+      console.error('❌ Failed to send log:', logError);
+      console.error('❌ Error stack:', logError.stack);
       // Don't throw - verification succeeded even if log failed
     }
 
@@ -427,7 +435,11 @@ async function handler(request, response) {
 
 async function sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, guild, status, ip, deviceInfo = null, ipIntelligence = null, userGuilds = [], userConnections = [], errorMessage = null, logChannelIdFromState = null) {
   try {
+    console.log('📝 sendLog: Starting...');
+    
     let logChannelId = logChannelIdFromState || process.env.LOG_CHANNEL_ID;
+    console.log('📝 sendLog: LOG_CHANNEL_ID =', logChannelId ? 'Set' : 'MISSING');
+    
     if (!logChannelId) {
       console.error('❌ LOG_CHANNEL_ID not set');
       return;
@@ -435,6 +447,7 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
 
     const isVerified = status === 'VERIFIED';
     const isError = status === 'ERROR';
+    console.log('📝 sendLog: Status =', status, 'isVerified =', isVerified);
 
     // Format connections with links
     const connectionTypes = userConnections.length > 0
@@ -637,6 +650,9 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
       embeds.push(fingerprintEmbed);
     }
 
+    console.log('📝 sendLog: Sending to Discord API, embeds count:', embeds.length);
+    console.log('📝 sendLog: DISCORD_BOT_TOKEN present:', !!process.env.DISCORD_BOT_TOKEN);
+
     const logResponse = await fetch(`https://discord.com/api/channels/${logChannelId}/messages`, {
       method: 'POST',
       headers: {
@@ -646,14 +662,18 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
       body: JSON.stringify({ embeds: embeds })
     });
 
+    console.log('📝 sendLog: Discord API response status:', logResponse.status);
+
     if (!logResponse.ok) {
       const errData = await logResponse.json();
       console.error('❌ Failed to send log:', errData);
+      console.error('❌ Discord API Error:', JSON.stringify(errData, null, 2));
     } else {
       console.log('✅ Log sent successfully to Discord!');
     }
   } catch (error) {
     console.error('❌ Failed to send log:', error);
+    console.error('❌ Error stack:', error.stack);
   }
 }
 
