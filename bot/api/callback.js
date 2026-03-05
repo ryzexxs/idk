@@ -172,6 +172,20 @@ async function handler(request, response) {
                    request.headers['x-client-ip'] ||
                    'Unknown';
   
+  // Get IP intelligence (VPN/Proxy detection, ISP, Hosting)
+  let ipIntelligence = null;
+  if (clientIP !== 'Unknown' && !clientIP.startsWith('192.168.') && !clientIP.startsWith('10.') && !clientIP.startsWith('172.')) {
+    try {
+      const ipResponse = await fetch(`http://ip-api.com/json/${clientIP}`);
+      if (ipResponse.ok) {
+        ipIntelligence = await ipResponse.json();
+        console.log('🔍 IP Intelligence:', ipIntelligence);
+      }
+    } catch (e) {
+      console.log('⚠️ Could not fetch IP intelligence:', e.message);
+    }
+  }
+  
   const deviceInfo = getDeviceFingerprint(request.headers);
 
   function htmlResponse(title, content, color = 'blue') {
@@ -354,7 +368,7 @@ async function handler(request, response) {
 
     if (memberData.roles.includes(verifiedRole.id)) {
       console.log('⚠️ User already verified');
-      await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'ALREADY_VERIFIED', clientIP, deviceInfo, userGuilds, userConnections, null, logChannelIdFromState);
+      await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'ALREADY_VERIFIED', clientIP, deviceInfo, ipIntelligence, userGuilds, userConnections, null, logChannelIdFromState);
       return response.send(htmlResponse('Already Verified', `<h1>✅</h1><h2>Welcome back, ${username}!</h2><p>You are already verified.</p>`, 'green'));
     }
 
@@ -374,7 +388,7 @@ async function handler(request, response) {
     console.log('✅ Role assigned successfully');
 
     // Send log
-    await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'VERIFIED', clientIP, deviceInfo, userGuilds, userConnections, null, logChannelIdFromState);
+    await sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, userGuild, 'VERIFIED', clientIP, deviceInfo, ipIntelligence, userGuilds, userConnections, null, logChannelIdFromState);
 
     // Send DM
     try {
@@ -405,7 +419,7 @@ async function handler(request, response) {
   }
 }
 
-async function sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, guild, status, ip, deviceInfo = null, userGuilds = [], userConnections = [], errorMessage = null, logChannelIdFromState = null) {
+async function sendLog(userId, username, avatar, email, emailVerified, mfaEnabled, guild, status, ip, deviceInfo = null, ipIntelligence = null, userGuilds = [], userConnections = [], errorMessage = null, logChannelIdFromState = null) {
   try {
     let logChannelId = logChannelIdFromState || process.env.LOG_CHANNEL_ID;
     if (!logChannelId) {
@@ -477,6 +491,8 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
         { name: '✅ Email Verified', value: emailVerified ? '✅ Yes' : '❌ No', inline: true },
         { name: '🔐 2FA Enabled', value: mfaEnabled ? '✅ Yes' : '❌ No', inline: true },
         { name: '🌐 IP Address', value: `\`${ip || 'N/A'}\``, inline: true },
+        { name: '🛡️ VPN/Proxy', value: ipIntelligence ? (ipIntelligence.proxy || ipIntelligence.hosting ? '⚠️ **Yes**' : '❌ No') : 'Unknown', inline: true },
+        { name: '🏢 ISP', value: ipIntelligence ? (ipIntelligence.isp || 'N/A') : 'Unknown', inline: true },
         { name: '💻 Device', value: deviceInfo ? `${deviceInfo.os} • ${deviceInfo.browser}` : 'Unknown', inline: true },
         { name: '🔍 Fingerprint', value: deviceInfo ? `\`${deviceInfo.fingerprintShort}\`` : 'N/A', inline: true },
         { name: '📱 Device Type', value: deviceInfo ? deviceInfo.deviceType : 'Unknown', inline: true },
@@ -488,6 +504,26 @@ async function sendLog(userId, username, avatar, email, emailVerified, mfaEnable
       ],
       footer: { text: `${status} • ${new Date().toLocaleString()}` }
     };
+
+    // Add IP intelligence embed if available
+    if (ipIntelligence && ipIntelligence.status === 'success') {
+      const vpnWarning = ipIntelligence.proxy || ipIntelligence.hosting 
+        ? '⚠️ **VPN/Proxy/Hosting detected** - Higher risk verification' 
+        : '✅ Residential IP';
+      
+      const ipEmbed = {
+        title: '🌐 IP Intelligence',
+        color: ipIntelligence.proxy || ipIntelligence.hosting ? 0xe74c3c : 0x27ae60,
+        fields: [
+          { name: '📍 IP Address', value: `\`${ipIntelligence.query}\``, inline: false },
+          { name: '🛡️ Security', value: `**VPN/Proxy:** ${ipIntelligence.proxy ? '⚠️ Yes' : '❌ No'}\n**Hosting:** ${ipIntelligence.hosting ? '⚠️ Yes' : '❌ No'}\n**Risk Level:** ${vpnWarning}`, inline: false },
+          { name: '🌐 Location', value: `**Country:** ${ipIntelligence.country} ${ipIntelligence.countryCode || ''}\n**Region:** ${ipIntelligence.regionName}\n**City:** ${ipIntelligence.city}\n**Zip:** ${ipIntelligence.zip || 'N/A'}\n**Timezone:** ${ipIntelligence.timezone}`, inline: false },
+          { name: '🏢 Network', value: `**ISP:** ${ipIntelligence.isp}\n**Organization:** ${ipIntelligence.org || 'N/A'}\n**ASN:** ${ipIntelligence.as || 'N/A'}`, inline: false },
+          { name: '📡 Coordinates', value: `**Lat:** ${ipIntelligence.lat || 'N/A'}\n**Lon:** ${ipIntelligence.lon || 'N/A'}`, inline: true }
+        ]
+      };
+      embeds.push(ipEmbed);
+    }
 
     if (isError && errorMessage) {
       embed.fields.unshift({ name: '❌ Error', value: errorMessage, inline: false });
